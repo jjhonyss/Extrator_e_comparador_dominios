@@ -1,0 +1,222 @@
+const fileInput = document.querySelector("#fileInput");
+const dropZone = document.querySelector("#dropZone");
+const fileList = document.querySelector("#fileList");
+const processButton = document.querySelector("#processButton");
+const confirmUpdateButton = document.querySelector("#confirmUpdateButton");
+const progressBar = document.querySelector("#progressBar");
+const statusText = document.querySelector("#status");
+const downloadBlocklist = document.querySelector("#downloadBlocklist");
+const downloadBase = document.querySelector("#downloadBase");
+const downloadReport = document.querySelector("#downloadReport");
+const themeToggle = document.querySelector("#themeToggle");
+const viewWhitelist = document.querySelector("#viewWhitelist");
+const whitelistDialog = document.querySelector("#whitelistDialog");
+const closeWhitelist = document.querySelector("#closeWhitelist");
+const whitelistContent = document.querySelector("#whitelistContent");
+const blocklistPreview = document.querySelector("#blocklistPreview");
+const whitelistPreview = document.querySelector("#whitelistPreview");
+const blocklistMeta = document.querySelector("#blocklistMeta");
+const whitelistMeta = document.querySelector("#whitelistMeta");
+const blocklistPrev = document.querySelector("#blocklistPrev");
+const blocklistNext = document.querySelector("#blocklistNext");
+
+let selectedFiles = [];
+let blocklistItems = [];
+let blocklistPage = 0;
+const pageSize = 100;
+
+function setStatus(message, type = "info") {
+  statusText.textContent = message;
+  statusText.dataset.type = type;
+}
+
+function updateFileList() {
+  fileList.innerHTML = "";
+  if (!selectedFiles.length) {
+    fileList.innerHTML = '<li class="empty-state">Nenhum arquivo selecionado.</li>';
+    processButton.disabled = true;
+    confirmUpdateButton.disabled = true;
+    return;
+  }
+
+  selectedFiles.forEach((file) => {
+    const item = document.createElement("li");
+    const extension = file.name.split(".").pop().toUpperCase();
+    item.innerHTML = `<span class="file-type">${extension}</span><span class="file-name">${file.name}</span><span class="file-size">${(file.size / 1024 / 1024).toFixed(2)}MB</span>`;
+    fileList.appendChild(item);
+  });
+  processButton.disabled = false;
+}
+
+function renderBlocklistPage() {
+  const total = blocklistItems.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  blocklistPage = Math.min(blocklistPage, pages - 1);
+  const start = blocklistPage * pageSize;
+  const pageItems = blocklistItems.slice(start, start + pageSize);
+
+  blocklistPreview.textContent = pageItems.length
+    ? [`# Secao ${blocklistPage + 1} de ${pages}`, `# Mostrando ${start + 1}-${start + pageItems.length} de ${total}`, "", ...pageItems].join("\n")
+    : "Nenhum dominio novo para bloqueio.";
+  blocklistMeta.textContent = total ? `${total} dominios novos para bloqueio` : "0 dominios novos";
+  blocklistPrev.disabled = blocklistPage === 0 || total === 0;
+  blocklistNext.disabled = blocklistPage >= pages - 1 || total === 0;
+}
+
+function renderWhitelist(items) {
+  whitelistPreview.textContent = items.length
+    ? items.map((item) => `${item.domain} (${item.category}) - ${item.reason}`).join("\n")
+    : "Nenhum dominio protegido.";
+  whitelistMeta.textContent = items.length ? `${items.length} dominios protegidos` : "0 dominios protegidos";
+}
+
+function acceptFiles(files) {
+  const allowed = [".txt", ".pdf"];
+  selectedFiles = Array.from(files).filter((file) => {
+    const lower = file.name.toLowerCase();
+    return allowed.some((extension) => lower.endsWith(extension));
+  });
+  updateFileList();
+  confirmUpdateButton.disabled = true;
+  downloadBase.classList.add("disabled");
+  downloadBlocklist.classList.add("disabled");
+  downloadReport.classList.add("disabled");
+  blocklistItems = [];
+  blocklistPage = 0;
+  renderBlocklistPage();
+  renderWhitelist([]);
+  setStatus(selectedFiles.length ? "Arquivos prontos para processamento." : "Nenhum arquivo valido selecionado.");
+}
+
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    fileInput.click();
+  }
+});
+fileInput.addEventListener("change", () => acceptFiles(fileInput.files));
+
+["dragenter", "dragover"].forEach((eventName) => {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.add("active");
+  });
+});
+
+["dragleave", "drop"].forEach((eventName) => {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("active");
+  });
+});
+
+dropZone.addEventListener("drop", (event) => acceptFiles(event.dataTransfer.files));
+
+processButton.addEventListener("click", () => {
+  if (!selectedFiles.length) return;
+
+  const formData = new FormData();
+  selectedFiles.forEach((file) => formData.append("files", file));
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/process");
+  processButton.disabled = true;
+  progressBar.style.width = "0%";
+  downloadBase.classList.add("disabled");
+  confirmUpdateButton.disabled = true;
+  setStatus("Enviando e processando arquivos...");
+
+  xhr.upload.addEventListener("progress", (event) => {
+    if (event.lengthComputable) {
+      progressBar.style.width = `${Math.round((event.loaded / event.total) * 100)}%`;
+    }
+  });
+
+  xhr.addEventListener("load", () => {
+    progressBar.style.width = "100%";
+    let response = {};
+    try {
+      response = JSON.parse(xhr.responseText || "{}");
+    } catch (_error) {
+      processButton.disabled = false;
+      setStatus("O servidor retornou uma resposta inesperada. Verifique a janela do servidor.", "error");
+      return;
+    }
+
+    if (xhr.status >= 400) {
+      processButton.disabled = false;
+      setStatus(response.error || "Falha no processamento.", "error");
+      return;
+    }
+
+    processButton.disabled = true;
+    document.querySelector("#domainsExtracted").textContent = response.domains_extracted;
+    document.querySelector("#newDomains").textContent = response.new_domains;
+    document.querySelector("#whitelistCount").textContent = response.whitelist_count;
+    document.querySelector("#blocklistCount").textContent = response.blocklist_count;
+    blocklistItems = response.blocklist || response.preview_blocklist || [];
+    blocklistPage = 0;
+    renderBlocklistPage();
+    renderWhitelist(response.whitelist || response.preview_whitelist || []);
+
+    downloadBlocklist.classList.remove("disabled");
+    downloadReport.classList.remove("disabled");
+    confirmUpdateButton.disabled = !response.pending_update_available;
+    const warningText = response.errors.length ? ` Avisos: ${response.errors.slice(0, 2).join(" | ")}` : "";
+    setStatus(`Extracao concluida em ${response.elapsed_seconds}s. Ja existentes descartados: ${response.existing_discarded_count}. Revise e confirme para atualizar a base.${warningText}`, response.errors.length ? "warning" : "success");
+  });
+
+  xhr.addEventListener("error", () => {
+    processButton.disabled = false;
+    setStatus("Erro de comunicacao com o servidor local.", "error");
+  });
+
+  xhr.send(formData);
+});
+
+confirmUpdateButton.addEventListener("click", async () => {
+  confirmUpdateButton.disabled = true;
+  setStatus("Atualizando base...", "info");
+
+  try {
+    const response = await fetch("/confirm-update", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) {
+      setStatus(data.error || "Falha ao atualizar a base.", "error");
+      confirmUpdateButton.disabled = false;
+      return;
+    }
+
+    downloadBase.classList.remove("disabled");
+    setStatus(`Base atualizada. Adicionados: ${data.added_count}. Ja existentes ignorados: ${data.ignored_existing_count}. Arquivo: ${data.updated_base_file}`, "success");
+  } catch (_error) {
+    setStatus("Erro de comunicacao ao atualizar a base.", "error");
+    confirmUpdateButton.disabled = false;
+  }
+});
+
+themeToggle.addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  themeToggle.textContent = document.body.classList.contains("dark") ? "Modo claro" : "Modo escuro";
+});
+
+blocklistPrev.addEventListener("click", () => {
+  blocklistPage -= 1;
+  renderBlocklistPage();
+});
+
+blocklistNext.addEventListener("click", () => {
+  blocklistPage += 1;
+  renderBlocklistPage();
+});
+
+viewWhitelist.addEventListener("click", async () => {
+  whitelistContent.textContent = "Carregando...";
+  whitelistDialog.showModal();
+  const response = await fetch("/whitelist");
+  const data = await response.json();
+  whitelistContent.textContent = data.content || "Whitelist ainda nao gerada.";
+});
+
+closeWhitelist.addEventListener("click", () => whitelistDialog.close());

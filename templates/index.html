@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Domain Guard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="dark">
+  <main class="shell">
+    <header class="header">
+      <a class="brand" href="/">
+        <span>DG</span>
+        <div>
+          <strong>Domain Guard</strong>
+          <small>Extrator e comparador de dominios</small>
+        </div>
+      </a>
+      <div class="header-actions">
+        <span class="badge">Local</span>
+        <span class="badge">Confirmacao manual</span>
+        <button id="themeToggle" class="ghost-button" type="button">Modo claro</button>
+      </div>
+    </header>
+
+    <section class="stats-grid" aria-label="Resumo do processamento">
+      <article class="stat-card">
+        <span>Dominios lidos</span>
+        <strong id="domainsExtracted">0</strong>
+      </article>
+      <article class="stat-card">
+        <span>Novos na base</span>
+        <strong id="newDomains">0</strong>
+      </article>
+      <article class="stat-card safe">
+        <span>Whitelist</span>
+        <strong id="whitelistCount">0</strong>
+      </article>
+      <article class="stat-card danger">
+        <span>Para incrementar</span>
+        <strong id="blocklistCount">0</strong>
+      </article>
+    </section>
+
+    <section class="work-grid">
+      <article class="panel upload-panel">
+        <div class="panel-title">
+          <div>
+            <span class="eyebrow">Upload</span>
+            <h2>Arquivos para processamento</h2>
+          </div>
+          <span class="badge">PDF/TXT ate {{ max_file_size_mb }}MB</span>
+        </div>
+
+        <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Selecionar arquivos">
+          <input id="fileInput" type="file" name="files" multiple accept=".txt,.pdf">
+          <span class="drop-icon">+</span>
+          <strong>Arraste arquivos aqui</strong>
+          <small>ou clique para selecionar</small>
+        </div>
+
+        <div class="progress-area">
+          <div>
+            <span>Progresso</span>
+            <strong id="status" class="status">Aguardando arquivos.</strong>
+          </div>
+          <div class="progress" aria-label="Progresso de upload">
+            <span id="progressBar"></span>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel queue-panel">
+        <div class="panel-title">
+          <div>
+            <span class="eyebrow">Fila</span>
+            <h2>Selecionados</h2>
+          </div>
+        </div>
+
+        <ul id="fileList" class="file-list">
+          <li class="empty-state">Nenhum arquivo selecionado.</li>
+        </ul>
+
+        <div class="actions">
+          <button id="processButton" class="primary-button" type="button" disabled>Extrair e comparar</button>
+          <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualizacao</button>
+          <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">Baixar novos</a>
+          <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">Baixar base atualizada</a>
+          <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatorio</a>
+          <button id="viewWhitelist" class="secondary-button" type="button">Ver whitelist</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="results-grid">
+      <article class="panel result-panel">
+        <div class="panel-title compact">
+          <h2>Novos dominios para bloqueio</h2>
+          <span class="badge">novos_dominios.txt</span>
+        </div>
+        <pre id="blocklistPreview">Sem processamento.</pre>
+        <div class="preview-toolbar">
+          <span id="blocklistMeta">0 dominios</span>
+          <div>
+            <button id="blocklistPrev" class="ghost-button" type="button" disabled>Anterior</button>
+            <button id="blocklistNext" class="ghost-button" type="button" disabled>Proxima</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel result-panel">
+        <div class="panel-title compact">
+          <h2>Dominios protegidos</h2>
+          <span class="badge">whitelist.txt</span>
+        </div>
+        <pre id="whitelistPreview">Sem processamento.</pre>
+        <div class="preview-toolbar">
+          <span id="whitelistMeta">0 dominios</span>
+        </div>
+      </article>
+    </section>
+
+    <dialog id="whitelistDialog">
+      <div class="dialog-header">
+        <h2>Whitelist atual</h2>
+        <button id="closeWhitelist" class="ghost-button" type="button">Fechar</button>
+      </div>
+      <pre id="whitelistContent">Carregando...</pre>
+      <a class="secondary-button" href="/download/whitelist">Download whitelist</a>
+    </dialog>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
