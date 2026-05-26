@@ -8,7 +8,15 @@ from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from config import CONFIG
-from processing import confirm_pending_update, ensure_directories, latest_updated_base_path, process_files
+from processing import (
+    confirm_pending_update,
+    ensure_directories,
+    generate_run_id,
+    get_run_file_paths,
+    get_run_upload_dir,
+    latest_updated_base_path,
+    process_files,
+)
 
 
 app = Flask(__name__)
@@ -33,6 +41,7 @@ def init_database() -> None:
             """
             CREATE TABLE IF NOT EXISTS processing_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT,
                 created_at TEXT NOT NULL,
                 files TEXT NOT NULL,
                 domains_extracted INTEGER NOT NULL,
@@ -45,6 +54,9 @@ def init_database() -> None:
             )
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(processing_runs)")}
+        if "run_id" not in columns:
+            conn.execute("ALTER TABLE processing_runs ADD COLUMN run_id TEXT")
 
 
 def save_audit(summary: dict) -> None:
@@ -53,11 +65,12 @@ def save_audit(summary: dict) -> None:
         conn.execute(
             """
             INSERT INTO processing_runs (
-                created_at, files, domains_extracted, new_domains, whitelist_count,
+                run_id, created_at, files, domains_extracted, new_domains, whitelist_count,
                 blocklist_count, duplicates_removed, errors, elapsed_seconds
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                summary.get("run_id"),
                 datetime.now().isoformat(timespec="seconds"),
                 json.dumps(summary["files_processed"], ensure_ascii=True),
                 summary["domains_extracted"],
@@ -89,6 +102,9 @@ def process_uploads():
     saved_paths: list[Path] = []
     errors: list[str] = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_id = generate_run_id()
+    upload_dir = get_run_upload_dir(CONFIG, run_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
     for uploaded in uploaded_files:
         if not uploaded.filename:
@@ -98,7 +114,7 @@ def process_uploads():
             continue
 
         filename = secure_filename(uploaded.filename)
-        target = Path(CONFIG["UPLOAD_DIR"]) / f"{timestamp}_{filename}"
+        target = upload_dir / f"{timestamp}_{filename}"
         uploaded.save(target)
         saved_paths.append(target)
         logging.info("Arquivo recebido: %s", target.name)
@@ -107,7 +123,7 @@ def process_uploads():
         return jsonify({"error": "Nenhum arquivo valido enviado", "errors": errors}), 400
 
     try:
-        summary = process_files(saved_paths, CONFIG)
+        summary = process_files(saved_paths, CONFIG, run_id)
         summary["errors"] = errors + summary["errors"]
         save_audit(summary)
         return jsonify(summary)
@@ -118,10 +134,12 @@ def process_uploads():
 
 @app.route("/download/<name>")
 def download_file(name: str):
+    run_id = request.args.get("run_id")
+    run_paths = get_run_file_paths(CONFIG, run_id) if run_id else {}
     allowed_downloads = {
-        "novos_dominios": CONFIG["OUTPUT_PATH"],
-        "whitelist": CONFIG["WHITELIST_PATH"],
-        "relatorio": CONFIG["REPORT_PATH"],
+        "novos_dominios": run_paths.get("blocklist", CONFIG["OUTPUT_PATH"]),
+        "whitelist": run_paths.get("whitelist", CONFIG["WHITELIST_PATH"]),
+        "relatorio": run_paths.get("report", CONFIG["REPORT_PATH"]),
     }
     path = latest_updated_base_path(CONFIG) if name == "base_atualizada" else allowed_downloads.get(name)
     if not path or not Path(path).exists():
@@ -132,7 +150,9 @@ def download_file(name: str):
 @app.route("/confirm-update", methods=["POST"])
 def confirm_update():
     try:
-        summary = confirm_pending_update(CONFIG)
+        payload = request.get_json(silent=True) or {}
+        run_id = payload.get("run_id")
+        summary = confirm_pending_update(CONFIG, run_id=run_id)
         logging.info("Atualizacao de base confirmada: %s", summary)
         return jsonify(summary)
     except Exception as exc:
@@ -142,7 +162,8 @@ def confirm_update():
 
 @app.route("/whitelist")
 def view_whitelist():
-    path = Path(CONFIG["WHITELIST_PATH"])
+    run_id = request.args.get("run_id")
+    path = get_run_file_paths(CONFIG, run_id)["whitelist"] if run_id else Path(CONFIG["WHITELIST_PATH"])
     content = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
     return jsonify({"content": content})
 

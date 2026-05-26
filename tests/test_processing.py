@@ -11,9 +11,12 @@ from processing import (
     extract_domains_from_lines,
     extract_domains_from_text,
     load_base_entries,
+    generate_run_id,
+    get_run_file_paths,
     extract_txt,
     merge_wrapped_domain_lines,
     normalize_domain,
+    process_files,
     split_whitelist,
 )
 
@@ -31,7 +34,12 @@ class ProcessingTests(unittest.TestCase):
         domains, duplicates = extract_domains_from_text(text)
         self.assertIn("bet365.com", domains)
         self.assertIn("anatel.gov.br", domains)
-        self.assertGreaterEqual(duplicates, 1)
+        self.assertEqual(duplicates, 1)
+
+    def test_extract_domains_from_text_does_not_double_count_single_match(self):
+        domains, duplicates = extract_domains_from_text("bet365.com")
+        self.assertEqual(domains, {"bet365.com"})
+        self.assertEqual(duplicates, 0)
 
     def test_extract_domains_from_text_ignores_email_domains(self):
         domains, _duplicates = extract_domains_from_text("Contato: suporte@adapta.org.br bloquear alvo.bet")
@@ -79,11 +87,28 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(classify_sensitive("sub.instagram.com")[1], "REDES_SOCIAIS")
         self.assertEqual(classify_sensitive("bet365.com"), (False, None, None))
         self.assertEqual(classify_sensitive("jogovip.bet"), (False, None, None))
+        self.assertEqual(classify_sensitive("bankroll-bet.com"), (False, None, None))
+        self.assertEqual(classify_sensitive("meu-banco.com"), (False, None, None))
+        self.assertEqual(classify_sensitive("777bankgame.com"), (False, None, None))
+        self.assertEqual(classify_sensitive("ds.bancodobrasil777bet.com"), (False, None, None))
+        self.assertEqual(classify_sensitive("faculdadescoc.com.br"), (False, None, None))
 
     def test_split_whitelist(self):
         blocklist, whitelist = split_whitelist({"bet365.com", "bancobrasil.com.br"})
         self.assertEqual(blocklist, ["bet365.com"])
         self.assertEqual(whitelist[0]["category"], "BANCOS")
+
+    def test_split_whitelist_blocks_domains_with_misleading_keywords(self):
+        blocklist, whitelist = split_whitelist({
+            "777bankgame.com",
+            "ds.bancodobrasil777bet.com",
+            "faculdadescoc.com.br",
+        })
+        self.assertEqual(
+            blocklist,
+            ["777bankgame.com", "ds.bancodobrasil777bet.com", "faculdadescoc.com.br"],
+        )
+        self.assertEqual(whitelist, [])
 
     def test_classify_for_base_update_discards_existing_after_whitelist(self):
         blocklist, whitelist, existing_discarded = classify_for_base_update(
@@ -101,18 +126,24 @@ class ProcessingTests(unittest.TestCase):
                 "BASE_FILE_PATH": root / "base_atual.txt",
                 "PENDING_UPDATE_PATH": root / "pendente.json",
                 "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
                 "UPLOAD_DIR": root / "uploads",
                 "AUDIT_DIR": root / "audits",
                 "BACKUP_DIR": root / "backups",
                 "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
                 "BACKUP_BEFORE_UPDATE": True,
             }
             config["OUTPUT_DIR"].mkdir()
+            config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
-            config["PENDING_UPDATE_PATH"].write_text('{"domains": ["a.com", "b.com"]}', encoding="utf-8")
+            run_id = "run_teste"
+            run_paths = get_run_file_paths(config, run_id)
+            run_paths["run_dir"].mkdir(parents=True)
+            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["a.com", "b.com"]}', encoding="utf-8")
 
-            first = confirm_pending_update(config)
-            second = confirm_pending_update(config)
+            first = confirm_pending_update(config, run_id=run_id)
+            second = confirm_pending_update(config, run_id=run_id)
 
         self.assertEqual(first["added_count"], 1)
         self.assertEqual(second["added_count"], 0)
@@ -124,21 +155,63 @@ class ProcessingTests(unittest.TestCase):
                 "BASE_FILE_PATH": root / "base_atual.txt",
                 "PENDING_UPDATE_PATH": root / "pendente.json",
                 "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
                 "UPLOAD_DIR": root / "uploads",
                 "AUDIT_DIR": root / "audits",
                 "BACKUP_DIR": root / "backups",
                 "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
                 "BACKUP_BEFORE_UPDATE": True,
             }
             config["OUTPUT_DIR"].mkdir()
+            config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\nA.COM\n", encoding="utf-8")
-            config["PENDING_UPDATE_PATH"].write_text('{"domains": ["b.com"]}', encoding="utf-8")
+            run_id = "run_teste"
+            run_paths = get_run_file_paths(config, run_id)
+            run_paths["run_dir"].mkdir(parents=True)
+            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["b.com"]}', encoding="utf-8")
 
-            result = confirm_pending_update(config)
+            result = confirm_pending_update(config, run_id=run_id)
             entries = load_base_entries(config["BASE_FILE_PATH"])
 
         self.assertEqual(result["base_total"], 3)
         self.assertEqual(entries, ["a.com", "A.COM", "b.com"])
+
+    def test_process_files_creates_run_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = {
+                "BASE_FILE_PATH": root / "base" / "base_atual.txt",
+                "WHITELIST_PATH": root / "output" / "whitelist.txt",
+                "OUTPUT_PATH": root / "output" / "novos_dominios.txt",
+                "REPORT_PATH": root / "output" / "relatorio.txt",
+                "PENDING_UPDATE_PATH": root / "output" / "pendente_atualizacao.json",
+                "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
+                "UPLOAD_DIR": root / "uploads",
+                "AUDIT_DIR": root / "audits",
+                "BACKUP_DIR": root / "backups",
+                "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
+                "ENABLE_OCR": False,
+                "OCR_LANGUAGE": "por+eng",
+                "OCR_ONLY_IF_NO_DOMAINS": True,
+                "BACKUP_BEFORE_UPDATE": True,
+            }
+            entrada = root / "uploads" / "entrada.txt"
+            entrada.parent.mkdir(parents=True)
+            entrada.write_text("bet365.com\ninstagram.com\n", encoding="utf-8")
+            run_id = generate_run_id()
+
+            summary = process_files([entrada], config, run_id)
+            run_paths = get_run_file_paths(config, run_id)
+            self.assertEqual(summary["run_id"], run_id)
+            self.assertTrue(run_paths["blocklist"].exists())
+            self.assertTrue(run_paths["whitelist"].exists())
+            self.assertTrue(run_paths["report"].exists())
+            self.assertTrue(run_paths["pending_update"].exists())
+            self.assertTrue(run_paths["manifest"].exists())
+            self.assertEqual(summary["artifacts"]["pending_update"], str(run_paths["pending_update"]))
 
     def test_build_report(self):
         report = build_report([], {"a.com"}, set(), {"a.com"}, ["a.com"], [], set(), 0.1)

@@ -23,11 +23,19 @@ const blocklistNext = document.querySelector("#blocklistNext");
 let selectedFiles = [];
 let blocklistItems = [];
 let blocklistPage = 0;
+let currentRunId = null;
 const pageSize = 100;
 
 function setStatus(message, type = "info") {
   statusText.textContent = message;
   statusText.dataset.type = type;
+}
+
+function updateDownloadLinks() {
+  const query = currentRunId ? `?run_id=${encodeURIComponent(currentRunId)}` : "";
+  downloadBlocklist.href = `/download/novos_dominios${query}`;
+  downloadReport.href = `/download/relatorio${query}`;
+  downloadBase.href = "/download/base_atualizada";
 }
 
 function updateFileList() {
@@ -85,6 +93,8 @@ function acceptFiles(files) {
   blocklistPage = 0;
   renderBlocklistPage();
   renderWhitelist([]);
+  currentRunId = null;
+  updateDownloadLinks();
   setStatus(selectedFiles.length ? "Arquivos prontos para processamento." : "Nenhum arquivo valido selecionado.");
 }
 
@@ -151,6 +161,7 @@ processButton.addEventListener("click", () => {
     }
 
     processButton.disabled = true;
+    currentRunId = response.run_id || null;
     document.querySelector("#domainsExtracted").textContent = response.domains_extracted;
     document.querySelector("#newDomains").textContent = response.new_domains;
     document.querySelector("#whitelistCount").textContent = response.whitelist_count;
@@ -159,6 +170,7 @@ processButton.addEventListener("click", () => {
     blocklistPage = 0;
     renderBlocklistPage();
     renderWhitelist(response.whitelist || response.preview_whitelist || []);
+    updateDownloadLinks();
 
     downloadBlocklist.classList.remove("disabled");
     downloadReport.classList.remove("disabled");
@@ -180,7 +192,11 @@ confirmUpdateButton.addEventListener("click", async () => {
   setStatus("Atualizando base...", "info");
 
   try {
-    const response = await fetch("/confirm-update", { method: "POST" });
+    const response = await fetch("/confirm-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_id: currentRunId }),
+    });
     const data = await response.json();
     if (!response.ok) {
       setStatus(data.error || "Falha ao atualizar a base.", "error");
@@ -214,9 +230,12 @@ blocklistNext.addEventListener("click", () => {
 viewWhitelist.addEventListener("click", async () => {
   whitelistContent.textContent = "Carregando...";
   whitelistDialog.showModal();
-  const response = await fetch("/whitelist");
+  const query = currentRunId ? `?run_id=${encodeURIComponent(currentRunId)}` : "";
+  const response = await fetch(`/whitelist${query}`);
   const data = await response.json();
   whitelistContent.textContent = data.content || "Whitelist ainda nao gerada.";
 });
 
 closeWhitelist.addEventListener("click", () => whitelistDialog.close());
+
+updateDownloadLinks();
