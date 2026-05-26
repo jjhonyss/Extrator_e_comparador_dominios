@@ -94,6 +94,7 @@ def normalize_domain(value: str) -> str | None:
     candidate = candidate.split("@")[-1]
     candidate = candidate.strip(" \t\r\n'\"`()[]{}<>.,;:|\\")
     candidate = candidate.removeprefix("*.")
+    candidate = candidate.removeprefix("www.")
     candidate = re.sub(r":\d+$", "", candidate)
 
     if not candidate or "." not in candidate or len(candidate) > 253:
@@ -419,6 +420,7 @@ def normalize_base_domain(value: str) -> str | None:
     candidate = value.strip().lower()
     candidate = candidate.split()[0]
     candidate = candidate.removeprefix("*.")
+    candidate = candidate.removeprefix("www.")
 
     if not candidate or "." not in candidate or len(candidate) > 253:
         return None

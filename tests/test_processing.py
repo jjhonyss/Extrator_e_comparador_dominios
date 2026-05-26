@@ -26,16 +26,19 @@ from processing import (
 
 class ProcessingTests(unittest.TestCase):
     def test_normalize_domain(self):
-        self.assertEqual(normalize_domain("https://www.Example.COM/path"), "www.example.com")
+        self.assertEqual(normalize_domain("https://www.Example.COM/path"), "example.com")
         self.assertEqual(normalize_domain("*.Gov.BR"), "gov.br")
-        self.assertEqual(normalize_domain("www.bet"), "www.bet")
+        self.assertEqual(normalize_domain("www.bet.com"), "bet.com")
+        self.assertIsNone(normalize_domain("www.bet"))
+        self.assertEqual(normalize_domain("www-site.com"), "www-site.com")
         self.assertIsNone(normalize_domain("invalid_domain"))
         self.assertIsNone(normalize_domain("example.123"))
         self.assertIsNone(normalize_domain("t.com"))
 
     def test_normalize_base_domain_is_strict_with_malformed_entries(self):
         self.assertEqual(normalize_base_domain("example.com"), "example.com")
-        self.assertEqual(normalize_base_domain("www.example.com"), "www.example.com")
+        self.assertEqual(normalize_base_domain("www.example.com"), "example.com")
+        self.assertEqual(normalize_base_domain("www-site.com"), "www-site.com")
         self.assertIsNone(normalize_base_domain("example.com:2087"))
         self.assertIsNone(normalize_base_domain("example.com/path"))
         self.assertIsNone(normalize_base_domain("example.com."))
@@ -298,9 +301,9 @@ class ProcessingTests(unittest.TestCase):
         fixture = Path("fixtures") / "Lista B.txt"
         self.assertTrue(fixture.exists())
         result = extract_txt(fixture)
-        self.assertEqual(result.raw_count, 39598)
-        self.assertEqual(len(result.domains), 39598)
-        self.assertIn("www.bet", result.domains)
+        self.assertEqual(result.raw_count, 39597)
+        self.assertEqual(len(result.domains), 39578)
+        self.assertIn("5757.win", result.domains)
 
     def test_build_report(self):
         report = build_report([], {"a.com"}, set(), {"a.com"}, ["a.com"], [], set(), 0.1)
