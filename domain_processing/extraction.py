@@ -13,6 +13,8 @@ NOISE_DOMAINS = {
     "t.com",
 }
 
+INVALID_LINE_SEPARATORS = {"|"}
+
 
 def ensure_directories(config: dict) -> None:
     for key in ("UPLOAD_DIR", "OUTPUT_DIR", "RUNS_DIR", "AUDIT_DIR", "BACKUP_DIR", "LOG_DIR"):
@@ -28,7 +30,6 @@ def normalize_domain(value: str) -> str | None:
     candidate = candidate.split("@")[-1]
     candidate = candidate.strip(" \t\r\n'\"`()[]{}<>.,;:|\\")
     candidate = candidate.removeprefix("*.")
-    candidate = candidate.removeprefix("www.")
     candidate = re.sub(r":\d+$", "", candidate)
 
     if not candidate or "." not in candidate or len(candidate) > 253:
@@ -74,15 +75,22 @@ def merge_wrapped_domain_lines(lines: Iterable[str]) -> list[str]:
     return merged
 
 
+def has_invalid_domain_separator(line: str) -> bool:
+    return any(separator in line for separator in INVALID_LINE_SEPARATORS)
+
+
 def extract_domains_from_text(text: str) -> tuple[set[str], int]:
     normalized: list[str] = []
-    for pattern in DOMAIN_PATTERNS:
-        for match in pattern.finditer(text or ""):
-            if match.start() > 0 and text[match.start() - 1] == "@":
-                continue
-            domain = normalize_domain(match.group(0))
-            if domain:
-                normalized.append(domain)
+    for line in (text or "").splitlines() or [text or ""]:
+        if has_invalid_domain_separator(line):
+            continue
+        for pattern in DOMAIN_PATTERNS:
+            for match in pattern.finditer(line):
+                if match.start() > 0 and line[match.start() - 1] == "@":
+                    continue
+                domain = normalize_domain(match.group(0))
+                if domain:
+                    normalized.append(domain)
 
     unique = set(normalized)
     return unique, max(0, len(normalized) - len(unique))
@@ -110,8 +118,11 @@ def extract_txt(path: Path) -> FileExtraction:
     result = FileExtraction(filename=path.name, methods=["txt"])
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
+        ignored_lines = sum(1 for line in text.splitlines() if has_invalid_domain_separator(line))
         result.domains, result.duplicate_count = extract_domains_from_text(text)
         result.raw_count = len(result.domains) + result.duplicate_count
+        if ignored_lines:
+            result.errors.append(f"Linhas ignoradas por separador invalido: {ignored_lines}")
     except OSError as exc:
         result.errors.append(f"Falha ao ler TXT: {exc}")
     return result
@@ -238,11 +249,38 @@ def load_domain_file(path: Path) -> set[str]:
         clean = line.strip()
         if not clean or clean.startswith("#"):
             continue
-        clean = clean.split()[0]
-        domain = normalize_domain(clean)
+        domain = normalize_base_domain(clean)
         if domain:
             domains.add(domain)
     return domains
+
+
+def normalize_base_domain(value: str) -> str | None:
+    candidate = value.strip().lower()
+    candidate = candidate.split()[0]
+    candidate = candidate.removeprefix("*.")
+
+    if not candidate or "." not in candidate or len(candidate) > 253:
+        return None
+    if any(separator in candidate for separator in (":", "/", "?", "#", "@")):
+        return None
+
+    labels = candidate.split(".")
+    if len(labels[-1]) < 2 or not labels[-1].isalpha():
+        return None
+
+    for label in labels:
+        if not label or len(label) > 63:
+            return None
+        if label.startswith("-") or label.endswith("-"):
+            return None
+        if not re.fullmatch(r"[a-z0-9-]+", label):
+            return None
+
+    if candidate in NOISE_DOMAINS:
+        return None
+
+    return candidate
 
 
 def load_base_entries(path: Path) -> list[str]:

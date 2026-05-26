@@ -11,10 +11,12 @@ from processing import (
     extract_domains_from_lines,
     extract_domains_from_text,
     load_base_entries,
+    load_domain_file,
     generate_run_id,
     get_run_file_paths,
     extract_txt,
     merge_wrapped_domain_lines,
+    normalize_base_domain,
     normalize_domain,
     process_files,
     split_whitelist,
@@ -23,14 +25,22 @@ from processing import (
 
 class ProcessingTests(unittest.TestCase):
     def test_normalize_domain(self):
-        self.assertEqual(normalize_domain("https://www.Example.COM/path"), "example.com")
+        self.assertEqual(normalize_domain("https://www.Example.COM/path"), "www.example.com")
         self.assertEqual(normalize_domain("*.Gov.BR"), "gov.br")
+        self.assertEqual(normalize_domain("www.bet"), "www.bet")
         self.assertIsNone(normalize_domain("invalid_domain"))
         self.assertIsNone(normalize_domain("example.123"))
         self.assertIsNone(normalize_domain("t.com"))
 
+    def test_normalize_base_domain_is_strict_with_malformed_entries(self):
+        self.assertEqual(normalize_base_domain("example.com"), "example.com")
+        self.assertEqual(normalize_base_domain("www.example.com"), "www.example.com")
+        self.assertIsNone(normalize_base_domain("example.com:2087"))
+        self.assertIsNone(normalize_base_domain("example.com/path"))
+        self.assertIsNone(normalize_base_domain("example.com."))
+
     def test_extract_domains_from_text_deduplicates(self):
-        text = "Bloquear https://www.bet365.com e bet365.com. Preservar anatel.gov.br"
+        text = "Bloquear bet365.com e bet365.com. Preservar anatel.gov.br"
         domains, duplicates = extract_domains_from_text(text)
         self.assertIn("bet365.com", domains)
         self.assertIn("anatel.gov.br", domains)
@@ -39,6 +49,11 @@ class ProcessingTests(unittest.TestCase):
     def test_extract_domains_from_text_does_not_double_count_single_match(self):
         domains, duplicates = extract_domains_from_text("bet365.com")
         self.assertEqual(domains, {"bet365.com"})
+        self.assertEqual(duplicates, 0)
+
+    def test_extract_domains_from_text_ignores_pipe_fragmented_line(self):
+        domains, duplicates = extract_domains_from_text("unitv | macro-tv-online-recarga.webnod | e.page")
+        self.assertEqual(domains, set())
         self.assertEqual(duplicates, 0)
 
     def test_extract_domains_from_text_ignores_email_domains(self):
@@ -212,6 +227,15 @@ class ProcessingTests(unittest.TestCase):
             self.assertTrue(run_paths["pending_update"].exists())
             self.assertTrue(run_paths["manifest"].exists())
             self.assertEqual(summary["artifacts"]["pending_update"], str(run_paths["pending_update"]))
+
+    def test_lista_b_fixture_matches_expected_increment_count(self):
+        fixture = Path("fixtures") / "Lista B.txt"
+        self.assertTrue(fixture.exists())
+        result = extract_txt(fixture)
+        existing = load_domain_file(Path("base") / "base_atual.txt")
+        blocklist, whitelist, _existing_discarded = classify_for_base_update(result.domains, existing)
+        self.assertEqual(len(blocklist), 764)
+        self.assertEqual(len(whitelist), 2)
 
     def test_build_report(self):
         report = build_report([], {"a.com"}, set(), {"a.com"}, ["a.com"], [], set(), 0.1)

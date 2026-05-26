@@ -9,6 +9,7 @@ from .extraction import (
     extract_txt,
     load_base_entries,
     load_domain_file,
+    normalize_base_domain,
     merge_wrapped_domain_lines,
     normalize_domain,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "latest_updated_base_path",
     "load_base_entries",
     "load_domain_file",
+    "normalize_base_domain",
     "load_pending_update",
     "merge_wrapped_domain_lines",
     "normalize_domain",
