@@ -2,6 +2,7 @@ from .classification import classify_for_base_update, classify_sensitive, compar
 from .extraction import (
     ensure_directories,
     extract_domains_from_lines,
+    extract_domains_from_pdf_text,
     extract_domains_from_text,
     extract_file,
     extract_pdf,
@@ -39,6 +40,7 @@ __all__ = [
     "generate_run_id",
     "ensure_directories",
     "extract_domains_from_lines",
+    "extract_domains_from_pdf_text",
     "extract_domains_from_text",
     "extract_file",
     "extract_pdf",

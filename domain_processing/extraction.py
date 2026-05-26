@@ -14,6 +14,63 @@ NOISE_DOMAINS = {
 }
 
 INVALID_LINE_SEPARATORS = {"|"}
+WRAPPED_MULTI_LABEL_SUFFIXES = {
+    ".com.br",
+    ".net.br",
+    ".org.br",
+    ".gov.br",
+    ".jus.br",
+}
+
+KNOWN_SINGLE_LABEL_SUFFIXES = {
+    "app",
+    "art",
+    "biz",
+    "bond",
+    "br",
+    "cc",
+    "click",
+    "club",
+    "co",
+    "com",
+    "cyou",
+    "digital",
+    "fit",
+    "fun",
+    "gov",
+    "help",
+    "info",
+    "ink",
+    "io",
+    "lat",
+    "life",
+    "link",
+    "lol",
+    "monster",
+    "mov",
+    "mx",
+    "net",
+    "online",
+    "org",
+    "page",
+    "pro",
+    "sbs",
+    "shop",
+    "site",
+    "store",
+    "study",
+    "tech",
+    "top",
+    "tv",
+    "uno",
+    "vip",
+    "vlog",
+    "vu",
+    "wiki",
+    "win",
+    "world",
+    "xyz",
+}
 
 
 def ensure_directories(config: dict) -> None:
@@ -69,6 +126,37 @@ def merge_wrapped_domain_lines(lines: Iterable[str]) -> list[str]:
                 index += 2
                 continue
 
+        if current and next_value:
+            joined = f"{current}{next_value}"
+            current_domain = normalize_domain(current)
+            next_domain = normalize_domain(next_value)
+            joined_domain = normalize_domain(joined)
+            next_prefix = next_value.lstrip('.').split('.', 1)[0]
+            next_labels = next_value.lstrip('.').split('.')
+            next_suffix = f".{'.'.join(next_labels[1:])}" if len(next_labels) > 1 else ""
+            current_last = current.split('.')[-1]
+
+            # PDFs often wrap a domain across lines without a hyphen, such as
+            # "softoni" + "c.com.br" or "...webnod" + "e.page".
+            if joined_domain and (
+                next_value.startswith(".")
+                or (
+                    "." in current
+                    and "." in next_value
+                    and not (current_domain and next_domain and has_known_domain_suffix(current) and has_known_domain_suffix(next_value))
+                    and len(current_last) <= 8
+                    and len(next_prefix) <= 8
+                    and (
+                        len(next_prefix) <= 2
+                        or len(current_last) <= 2
+                        or next_suffix in WRAPPED_MULTI_LABEL_SUFFIXES
+                    )
+                )
+            ):
+                merged.append(joined)
+                index += 2
+                continue
+
         merged.append(current)
         index += 1
 
@@ -79,6 +167,51 @@ def has_invalid_domain_separator(line: str) -> bool:
     return any(separator in line for separator in INVALID_LINE_SEPARATORS)
 
 
+def rebuild_split_domain_segments(line: str) -> str:
+    if "|" not in line:
+        return line
+
+    parts = [part.strip() for part in line.split("|")]
+    rebuilt: list[str] = []
+    index = 0
+
+    while index < len(parts):
+        current = parts[index]
+        next_value = parts[index + 1] if index + 1 < len(parts) else ""
+
+        if current and next_value:
+            merged = f"{current}{next_value}"
+            next_prefix = next_value.split(".", 1)[0]
+            if "." in current and "." in next_value and len(next_prefix) <= 2 and normalize_domain(merged):
+                rebuilt.append(merged)
+                index += 2
+                continue
+
+        rebuilt.append(current)
+        index += 1
+
+    return " ".join(part for part in rebuilt if part)
+
+
+def sanitize_text_for_domain_extraction(text: str) -> str:
+    sanitized = rebuild_split_domain_segments(text)
+    for separator in INVALID_LINE_SEPARATORS:
+        sanitized = sanitized.replace(separator, " ")
+    return sanitized
+
+
+def has_known_domain_suffix(candidate: str) -> bool:
+    normalized = normalize_domain(candidate)
+    if not normalized:
+        return False
+
+    for suffix in WRAPPED_MULTI_LABEL_SUFFIXES:
+        if normalized.endswith(suffix):
+            return True
+
+    return normalized.rsplit(".", 1)[-1] in KNOWN_SINGLE_LABEL_SUFFIXES
+
+
 def extract_domains_from_text(text: str) -> tuple[set[str], int]:
     normalized: list[str] = []
     for line in (text or "").splitlines() or [text or ""]:
@@ -87,6 +220,22 @@ def extract_domains_from_text(text: str) -> tuple[set[str], int]:
         for pattern in DOMAIN_PATTERNS:
             for match in pattern.finditer(line):
                 if match.start() > 0 and line[match.start() - 1] == "@":
+                    continue
+                domain = normalize_domain(match.group(0))
+                if domain:
+                    normalized.append(domain)
+
+    unique = set(normalized)
+    return unique, max(0, len(normalized) - len(unique))
+
+
+def extract_domains_from_pdf_text(text: str) -> tuple[set[str], int]:
+    normalized: list[str] = []
+    for line in (text or "").splitlines() or [text or ""]:
+        sanitized_line = sanitize_text_for_domain_extraction(line)
+        for pattern in DOMAIN_PATTERNS:
+            for match in pattern.finditer(sanitized_line):
+                if match.start() > 0 and sanitized_line[match.start() - 1] == "@":
                     continue
                 domain = normalize_domain(match.group(0))
                 if domain:
@@ -184,7 +333,7 @@ def extract_pdf(
     except Exception as exc:
         result.errors.append(f"Falha na extracao estruturada do PDF: {exc}")
 
-    structured_domains, structured_duplicates = extract_domains_from_text("\n".join(text_parts))
+    structured_domains, structured_duplicates = extract_domains_from_pdf_text("\n".join(text_parts))
     should_run_ocr = enable_ocr and (not ocr_only_if_no_domains or not structured_domains)
 
     if should_run_ocr:
@@ -196,7 +345,7 @@ def extract_pdf(
     elif enable_ocr and ocr_only_if_no_domains and structured_domains:
         result.errors.append("OCR ignorado: dominios encontrados na extracao estruturada")
 
-    result.domains, result.duplicate_count = extract_domains_from_text("\n".join(text_parts))
+    result.domains, result.duplicate_count = extract_domains_from_pdf_text("\n".join(text_parts))
     result.raw_count = len(result.domains) + result.duplicate_count
     if structured_domains and not should_run_ocr:
         result.duplicate_count = structured_duplicates

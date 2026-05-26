@@ -9,6 +9,7 @@ from processing import (
     classify_for_base_update,
     confirm_pending_update,
     extract_domains_from_lines,
+    extract_domains_from_pdf_text,
     extract_domains_from_text,
     load_base_entries,
     load_domain_file,
@@ -56,6 +57,16 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(domains, set())
         self.assertEqual(duplicates, 0)
 
+    def test_extract_domains_from_pdf_text_treats_pipe_as_visual_noise(self):
+        domains, duplicates = extract_domains_from_pdf_text("unitv | macro-tv-online-recarga.webnod | e.page")
+        self.assertEqual(domains, {"macro-tv-online-recarga.webnode.page"})
+        self.assertEqual(duplicates, 0)
+
+    def test_extract_domains_from_pdf_text_extracts_multiple_candidates(self):
+        domains, duplicates = extract_domains_from_pdf_text("portal | alpha.com | beta.net")
+        self.assertEqual(domains, {"alpha.com", "beta.net"})
+        self.assertEqual(duplicates, 0)
+
     def test_extract_domains_from_text_ignores_email_domains(self):
         domains, _duplicates = extract_domains_from_text("Contato: suporte@adapta.org.br bloquear alvo.bet")
         self.assertNotIn("adapta.org.br", domains)
@@ -79,6 +90,44 @@ class ProcessingTests(unittest.TestCase):
         self.assertIn("xn--kksrenoveringlinkpinghecq.nu", domains)
         self.assertNotIn("hecq.nu", domains)
         self.assertNotIn("t.com", domains)
+
+    def test_merge_wrapped_domain_lines_rebuilds_pdf_line_break_domain(self):
+        lines = merge_wrapped_domain_lines(["tv-0800-tv-online-ao-vivo.softoni", "c.com.br", "tv0800.click"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("tv-0800-tv-online-ao-vivo.softonic.com.br", domains)
+        self.assertIn("tv0800.click", domains)
+        self.assertNotIn("c.com.br", domains)
+
+    def test_merge_wrapped_domain_lines_rebuilds_softonic_break_domain(self):
+        lines = merge_wrapped_domain_lines(["megacine-os-melhores-filmes.so", "ftonic.com.br", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("megacine-os-melhores-filmes.softonic.com.br", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("ftonic.com.br", domains)
+
+    def test_merge_wrapped_domain_lines_rebuilds_single_label_tld_break(self):
+        lines = merge_wrapped_domain_lines(["codigoserecargasoficial.catalog.k", "yte.site", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("codigoserecargasoficial.catalog.kyte.site", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("yte.site", domains)
+
+    def test_merge_wrapped_domain_lines_does_not_join_adjacent_valid_domains(self):
+        lines = merge_wrapped_domain_lines(["abinteligencia.com.br", "rgacom.com.br", "academiarecargas.com", "rossnet.com.br"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("abinteligencia.com.br", domains)
+        self.assertIn("rgacom.com.br", domains)
+        self.assertIn("academiarecargas.com", domains)
+        self.assertIn("rossnet.com.br", domains)
+        self.assertNotIn("abinteligencia.com.brrgacom.com.br", domains)
+        self.assertNotIn("academiarecargas.comrossnet.com.br", domains)
+
+    def test_merge_wrapped_domain_lines_rebuilds_pdf_pipe_style_fragment(self):
+        lines = merge_wrapped_domain_lines(["macro-tv-online-recarga.webnod", "e.page", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("macro-tv-online-recarga.webnode.page", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("e.page", domains)
 
     def test_extract_txt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -232,10 +281,9 @@ class ProcessingTests(unittest.TestCase):
         fixture = Path("fixtures") / "Lista B.txt"
         self.assertTrue(fixture.exists())
         result = extract_txt(fixture)
-        existing = load_domain_file(Path("base") / "base_atual.txt")
-        blocklist, whitelist, _existing_discarded = classify_for_base_update(result.domains, existing)
-        self.assertEqual(len(blocklist), 764)
-        self.assertEqual(len(whitelist), 2)
+        self.assertEqual(result.raw_count, 39598)
+        self.assertEqual(len(result.domains), 39598)
+        self.assertIn("www.bet", result.domains)
 
     def test_build_report(self):
         report = build_report([], {"a.com"}, set(), {"a.com"}, ["a.com"], [], set(), 0.1)
