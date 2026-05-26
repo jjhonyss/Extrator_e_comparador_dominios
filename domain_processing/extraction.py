@@ -15,11 +15,13 @@ NOISE_DOMAINS = {
 
 INVALID_LINE_SEPARATORS = {"|"}
 WRAPPED_MULTI_LABEL_SUFFIXES = {
+    ".co.uk",
     ".com.br",
     ".net.br",
     ".org.br",
     ".gov.br",
     ".jus.br",
+    ".workers.dev",
 }
 
 KNOWN_SINGLE_LABEL_SUFFIXES = {
@@ -27,6 +29,7 @@ KNOWN_SINGLE_LABEL_SUFFIXES = {
     "art",
     "biz",
     "bond",
+    "bz",
     "br",
     "cc",
     "click",
@@ -34,11 +37,14 @@ KNOWN_SINGLE_LABEL_SUFFIXES = {
     "co",
     "com",
     "cyou",
+    "date",
     "digital",
+    "eu",
     "fit",
     "fun",
     "gov",
     "help",
+    "in",
     "info",
     "ink",
     "io",
@@ -53,6 +59,7 @@ KNOWN_SINGLE_LABEL_SUFFIXES = {
     "online",
     "org",
     "page",
+    "pictures",
     "pro",
     "sbs",
     "shop",
@@ -120,8 +127,12 @@ def merge_wrapped_domain_lines(lines: Iterable[str]) -> list[str]:
         next_value = items[index + 1].strip() if index + 1 < len(items) else ""
 
         if current.endswith("-") and next_value:
-            joined = f"{current[:-1]}{next_value}"
-            if normalize_domain(joined):
+            candidates = [f"{current}{next_value}", f"{current[:-1]}{next_value}"]
+            if current.startswith("xn--"):
+                candidates.reverse()
+
+            joined = next((candidate for candidate in candidates if normalize_domain(candidate)), None)
+            if joined:
                 merged.append(joined)
                 index += 2
                 continue

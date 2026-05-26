@@ -122,6 +122,23 @@ class ProcessingTests(unittest.TestCase):
         self.assertNotIn("abinteligencia.com.brrgacom.com.br", domains)
         self.assertNotIn("academiarecargas.comrossnet.com.br", domains)
 
+    def test_merge_wrapped_domain_lines_keeps_real_hyphen_when_joining_pdf_break(self):
+        lines = merge_wrapped_domain_lines(["storage-usa-sv07-", "user78787451.6siusan.workers.dev", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("storage-usa-sv07-user78787451.6siusan.workers.dev", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("storage-usa-sv07user78787451.6siusan.workers.dev", domains)
+
+    def test_merge_wrapped_domain_lines_does_not_join_adjacent_valid_domains(self):
+        lines = merge_wrapped_domain_lines(["abinteligencia.com.br", "rgacom.com.br", "academiarecargas.com", "rossnet.com.br"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("abinteligencia.com.br", domains)
+        self.assertIn("rgacom.com.br", domains)
+        self.assertIn("academiarecargas.com", domains)
+        self.assertIn("rossnet.com.br", domains)
+        self.assertNotIn("abinteligencia.com.brrgacom.com.br", domains)
+        self.assertNotIn("academiarecargas.comrossnet.com.br", domains)
+
     def test_merge_wrapped_domain_lines_rebuilds_pdf_pipe_style_fragment(self):
         lines = merge_wrapped_domain_lines(["macro-tv-online-recarga.webnod", "e.page", "alpha.com"])
         domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
