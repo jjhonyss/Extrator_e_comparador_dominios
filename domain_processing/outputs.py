@@ -1,5 +1,7 @@
 import json
 import shutil
+import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -78,6 +80,61 @@ def load_pending_update(config: dict, run_id: str | None = None) -> list[str]:
     except json.JSONDecodeError:
         return []
     return sorted({domain for domain in payload.get("domains", []) if normalize_domain(domain)})
+
+
+def normalize_domain_list(domains: list[str] | None) -> list[str]:
+    if not domains:
+        return []
+    return sorted({normalized for domain in domains if (normalized := normalize_domain(str(domain)))})
+
+
+def rejected_file_path(config: dict) -> Path:
+    configured = config.get("REJECTED_FILE_PATH")
+    if configured:
+        return Path(configured)
+    return Path(config["BASE_FILE_PATH"]).parent / "base_rejeitados.txt"
+
+
+def save_rejected_domains(config: dict, domains: list[str], run_id: str | None = None) -> int:
+    normalized = normalize_domain_list(domains)
+    if not normalized:
+        return 0
+
+    path = rejected_file_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_domain_file(path)
+    merged = sorted(existing.union(normalized))
+    path.write_text("\n".join(merged) + "\n", encoding="utf-8")
+
+    audit_dir = config.get("AUDIT_DIR")
+    if audit_dir:
+        db_path = Path(audit_dir) / "auditoria.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rejected_domains (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain TEXT UNIQUE,
+                    rejected_at TEXT NOT NULL,
+                    run_id TEXT
+                )
+                """
+            )
+            rejected_at = datetime.now().isoformat(timespec="seconds")
+            conn.executemany(
+                """
+                INSERT INTO rejected_domains (domain, rejected_at, run_id)
+                VALUES (?, ?, ?)
+                ON CONFLICT(domain) DO UPDATE SET
+                    rejected_at = excluded.rejected_at,
+                    run_id = excluded.run_id
+                """,
+                [(domain, rejected_at, run_id) for domain in normalized],
+            )
+            conn.commit()
+
+    return len(normalized)
 
 
 def build_report(
@@ -185,21 +242,32 @@ def update_base_file(config: dict, new_blocklist: list[str], existing: set[str] 
     return base_path
 
 
-def confirm_pending_update(config: dict, run_id: str | None = None) -> dict:
+def confirm_pending_update(
+    config: dict,
+    run_id: str | None = None,
+    approved_domains: list[str] | None = None,
+    rejected_domains: list[str] | None = None,
+) -> dict:
     ensure_directories(config)
     with acquire_update_lock(config):
         pending = load_pending_update(config, run_id)
+        pending_set = set(pending)
+        approved = normalize_domain_list(approved_domains)
+        rejected = sorted(set(normalize_domain_list(rejected_domains)).intersection(pending_set))
+        selected = sorted(set(approved).intersection(pending_set)) if approved_domains is not None else pending
+        rejected_count = save_rejected_domains(config, rejected, run_id)
         base_path = Path(config["BASE_FILE_PATH"])
         current = load_domain_file(base_path)
         existing_entries = load_base_entries(base_path)
-        domains_to_add = sorted(set(pending) - current)
+        domains_to_add = sorted(set(selected) - current)
 
         if not domains_to_add:
             latest = latest_updated_base_path(config)
             return {
                 "run_id": run_id,
                 "added_count": 0,
-                "ignored_existing_count": len(set(pending).intersection(current)),
+                "rejected_count": rejected_count,
+                "ignored_existing_count": len(set(selected).intersection(current)),
                 "updated_base_file": latest.name if latest else None,
                 "base_total": len(existing_entries),
             }
@@ -216,6 +284,7 @@ def confirm_pending_update(config: dict, run_id: str | None = None) -> dict:
             manifest["base_update"] = {
                 "confirmed_at": datetime.now().isoformat(timespec="seconds"),
                 "added_count": len(domains_to_add),
+                "rejected_count": rejected_count,
                 "updated_base_file": updated_base_path.name,
             }
             write_run_manifest(config, run_id, manifest)
@@ -223,7 +292,8 @@ def confirm_pending_update(config: dict, run_id: str | None = None) -> dict:
         return {
             "run_id": run_id,
             "added_count": len(domains_to_add),
-            "ignored_existing_count": len(set(pending).intersection(current)),
+            "rejected_count": rejected_count,
+            "ignored_existing_count": len(set(selected).intersection(current)),
             "updated_base_file": updated_base_path.name,
             "base_total": len(updated),
         }

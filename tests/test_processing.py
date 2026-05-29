@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from processing import (
@@ -260,6 +262,52 @@ class ProcessingTests(unittest.TestCase):
 
         self.assertEqual(result["base_total"], 3)
         self.assertEqual(entries, ["a.com", "A.COM", "b.com"])
+
+    def test_confirm_pending_update_accepts_approved_and_rejected_domains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = {
+                "BASE_FILE_PATH": root / "base" / "base_atual.txt",
+                "REJECTED_FILE_PATH": root / "base" / "base_rejeitados.txt",
+                "PENDING_UPDATE_PATH": root / "pendente.json",
+                "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
+                "UPLOAD_DIR": root / "uploads",
+                "AUDIT_DIR": root / "audits",
+                "BACKUP_DIR": root / "backups",
+                "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
+                "BACKUP_BEFORE_UPDATE": True,
+            }
+            config["BASE_FILE_PATH"].parent.mkdir(parents=True)
+            config["OUTPUT_DIR"].mkdir()
+            config["RUNS_DIR"].mkdir(parents=True)
+            config["AUDIT_DIR"].mkdir()
+            config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
+            run_id = "run_teste"
+            run_paths = get_run_file_paths(config, run_id)
+            run_paths["run_dir"].mkdir(parents=True)
+            run_paths["pending_update"].write_text(
+                '{"run_id": "run_teste", "domains": ["a.com", "b.com", "c.com"]}',
+                encoding="utf-8",
+            )
+
+            result = confirm_pending_update(
+                config,
+                run_id=run_id,
+                approved_domains=["b.com"],
+                rejected_domains=["c.com", "fora-do-pendente.com"],
+            )
+            entries = load_base_entries(config["BASE_FILE_PATH"])
+            rejected_entries = load_base_entries(config["REJECTED_FILE_PATH"])
+            with closing(sqlite3.connect(config["AUDIT_DIR"] / "auditoria.db")) as conn:
+                rows = conn.execute("SELECT domain, run_id FROM rejected_domains ORDER BY domain").fetchall()
+
+        self.assertEqual(result["added_count"], 1)
+        self.assertEqual(result["rejected_count"], 1)
+        self.assertEqual(entries, ["a.com", "b.com"])
+        self.assertEqual(rejected_entries, ["c.com"])
+        self.assertEqual(rows, [("c.com", "run_teste")])
 
     def test_process_files_creates_run_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,6 +7,7 @@ CONFIG = {
     "MAX_FILE_SIZE": 50 * 1024 * 1024,
     "ALLOWED_EXTENSIONS": {".pdf", ".txt"},
     "BASE_FILE_PATH": BASE_DIR / "base" / "base_atual.txt",
+    "REJECTED_FILE_PATH": BASE_DIR / "base" / "base_rejeitados.txt",
     "WHITELIST_PATH": BASE_DIR / "output" / "whitelist.txt",
     "OUTPUT_PATH": BASE_DIR / "output" / "novos_dominios.txt",
     "REPORT_PATH": BASE_DIR / "output" / "relatorio.txt",

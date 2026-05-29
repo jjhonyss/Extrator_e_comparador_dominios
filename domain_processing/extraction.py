@@ -85,6 +85,10 @@ def ensure_directories(config: dict) -> None:
         Path(config[key]).mkdir(parents=True, exist_ok=True)
     Path(config["BASE_FILE_PATH"]).parent.mkdir(parents=True, exist_ok=True)
     Path(config["BASE_FILE_PATH"]).touch(exist_ok=True)
+    rejected_path = config.get("REJECTED_FILE_PATH")
+    if rejected_path:
+        Path(rejected_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(rejected_path).touch(exist_ok=True)
 
 
 def normalize_domain(value: str) -> str | None:

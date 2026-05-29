@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from config import CONFIG
+from domain_processing.audit import load_audit_history
 from processing import (
     confirm_pending_update,
     ensure_directories,
@@ -57,6 +58,16 @@ def init_database() -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(processing_runs)")}
         if "run_id" not in columns:
             conn.execute("ALTER TABLE processing_runs ADD COLUMN run_id TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rejected_domains (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT UNIQUE,
+                rejected_at TEXT NOT NULL,
+                run_id TEXT
+            )
+            """
+        )
 
 
 def save_audit(summary: dict) -> None:
@@ -152,7 +163,12 @@ def confirm_update():
     try:
         payload = request.get_json(silent=True) or {}
         run_id = payload.get("run_id")
-        summary = confirm_pending_update(CONFIG, run_id=run_id)
+        summary = confirm_pending_update(
+            CONFIG,
+            run_id=run_id,
+            approved_domains=payload.get("approved_domains") if "approved_domains" in payload else None,
+            rejected_domains=payload.get("rejected_domains") if "rejected_domains" in payload else None,
+        )
         logging.info("Atualizacao de base confirmada: %s", summary)
         return jsonify(summary)
     except Exception as exc:
@@ -166,6 +182,15 @@ def view_whitelist():
     path = get_run_file_paths(CONFIG, run_id)["whitelist"] if run_id else Path(CONFIG["WHITELIST_PATH"])
     content = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
     return jsonify({"content": content})
+
+
+@app.route("/audit-history")
+def audit_history():
+    try:
+        limit = min(max(int(request.args.get("limit", 100)), 1), 500)
+    except ValueError:
+        limit = 100
+    return jsonify({"runs": load_audit_history(Path(CONFIG["AUDIT_DIR"]), limit)})
 
 
 @app.errorhandler(413)

@@ -20,11 +20,18 @@ const whitelistMeta = document.querySelector("#whitelistMeta");
 const blocklistPrev = document.querySelector("#blocklistPrev");
 const blocklistNext = document.querySelector("#blocklistNext");
 const warningsList = document.querySelector("#warningsList");
+const tabButtons = document.querySelectorAll(".tab-button");
+const tabPanels = document.querySelectorAll(".tab-panel");
+const refreshHistory = document.querySelector("#refreshHistory");
+const historyStatus = document.querySelector("#historyStatus");
+const historyTableBody = document.querySelector("#historyTableBody");
 
 let selectedFiles = [];
 let blocklistItems = [];
+let approvedDomains = new Set();
 let blocklistPage = 0;
 let currentRunId = null;
+let historyLoaded = false;
 const pageSize = 100;
 
 function setStatus(message, type = "info") {
@@ -37,6 +44,83 @@ function updateDownloadLinks() {
   downloadBlocklist.href = `/download/novos_dominios${query}`;
   downloadReport.href = `/download/relatorio${query}`;
   downloadBase.href = "/download/base_atualizada";
+}
+
+function setActiveTab(targetId) {
+  tabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.tabTarget === targetId);
+  });
+  tabPanels.forEach((panel) => {
+    const active = panel.id === targetId;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+
+  if (targetId === "historyPanel" && !historyLoaded) {
+    loadAuditHistory();
+  }
+}
+
+function formatHistoryList(items, emptyText = "-") {
+  if (!items || !items.length) return emptyText;
+  return items.join(", ");
+}
+
+function setHistoryStatus(message, type = "info") {
+  historyStatus.textContent = message;
+  historyStatus.dataset.type = type;
+}
+
+function appendHistoryCell(row, text, className = "") {
+  const cell = document.createElement("td");
+  cell.textContent = text;
+  if (className) cell.className = className;
+  row.appendChild(cell);
+}
+
+function renderHistoryRows(runs) {
+  historyTableBody.innerHTML = "";
+  if (!runs.length) {
+    const row = document.createElement("tr");
+    appendHistoryCell(row, "Nenhuma execução registrada ainda.");
+    row.firstChild.colSpan = 10;
+    historyTableBody.appendChild(row);
+    return;
+  }
+
+  runs.forEach((run) => {
+    const row = document.createElement("tr");
+    appendHistoryCell(row, run.created_at || "-");
+    appendHistoryCell(row, run.run_id || "-", "mono-cell");
+    appendHistoryCell(row, formatHistoryList(run.files), "wide-cell");
+    appendHistoryCell(row, String(run.domains_extracted ?? 0), "number-cell");
+    appendHistoryCell(row, String(run.new_domains ?? 0), "number-cell");
+    appendHistoryCell(row, String(run.whitelist_count ?? 0), "number-cell");
+    appendHistoryCell(row, String(run.blocklist_count ?? 0), "number-cell");
+    appendHistoryCell(row, String(run.duplicates_removed ?? 0), "number-cell");
+    appendHistoryCell(row, `${run.elapsed_seconds ?? 0}s`, "number-cell");
+    appendHistoryCell(row, formatHistoryList(run.errors, "Nenhum"), "wide-cell");
+    historyTableBody.appendChild(row);
+  });
+}
+
+async function loadAuditHistory() {
+  setHistoryStatus("Carregando histórico...", "info");
+  try {
+    const response = await fetch("/audit-history");
+    const data = await response.json();
+    if (!response.ok) {
+      setHistoryStatus(data.error || "Falha ao carregar histórico.", "error");
+      return;
+    }
+
+    const runs = data.runs || [];
+    renderHistoryRows(runs);
+    historyLoaded = true;
+    setHistoryStatus(runs.length ? `${runs.length} execuções carregadas.` : "Nenhuma execução registrada.", "success");
+  } catch (_error) {
+    setHistoryStatus("Erro de comunicação ao carregar histórico.", "error");
+  }
 }
 
 function updateFileList() {
@@ -63,11 +147,47 @@ function renderBlocklistPage() {
   blocklistPage = Math.min(blocklistPage, pages - 1);
   const start = blocklistPage * pageSize;
   const pageItems = blocklistItems.slice(start, start + pageSize);
+  const approvedCount = blocklistItems.filter((domain) => approvedDomains.has(domain)).length;
+  const rejectedCount = total - approvedCount;
 
-  blocklistPreview.textContent = pageItems.length
-    ? [`# Secao ${blocklistPage + 1} de ${pages}`, `# Mostrando ${start + 1}-${start + pageItems.length} de ${total}`, "", ...pageItems].join("\n")
-    : "Nenhum dominio novo para bloqueio.";
-  blocklistMeta.textContent = total ? `${total} dominios novos para bloqueio` : "0 dominios novos";
+  blocklistPreview.innerHTML = "";
+
+  if (!pageItems.length) {
+    blocklistPreview.textContent = "Nenhum dominio novo para bloqueio.";
+  } else {
+    const header = document.createElement("div");
+    header.className = "review-list-header";
+    header.textContent = `Secao ${blocklistPage + 1} de ${pages} - Mostrando ${start + 1}-${start + pageItems.length} de ${total}`;
+    blocklistPreview.appendChild(header);
+
+    pageItems.forEach((domain) => {
+      const label = document.createElement("label");
+      label.className = "review-domain";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = approvedDomains.has(domain);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          approvedDomains.add(domain);
+        } else {
+          approvedDomains.delete(domain);
+        }
+        renderBlocklistPage();
+      });
+
+      const text = document.createElement("span");
+      text.textContent = domain;
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      blocklistPreview.appendChild(label);
+    });
+  }
+
+  blocklistMeta.textContent = total
+    ? `${approvedCount} aprovados; ${rejectedCount} rejeitados; ${total} no total`
+    : "0 dominios novos";
   blocklistPrev.disabled = blocklistPage === 0 || total === 0;
   blocklistNext.disabled = blocklistPage >= pages - 1 || total === 0;
 }
@@ -91,6 +211,7 @@ function acceptFiles(files) {
   downloadBlocklist.classList.add("disabled");
   downloadReport.classList.add("disabled");
   blocklistItems = [];
+  approvedDomains = new Set();
   blocklistPage = 0;
   renderBlocklistPage();
   renderWhitelist([]);
@@ -172,6 +293,7 @@ processButton.addEventListener("click", () => {
     document.querySelector("#whitelistCount").textContent = response.whitelist_count;
     document.querySelector("#blocklistCount").textContent = response.blocklist_count;
     blocklistItems = response.blocklist || response.preview_blocklist || [];
+    approvedDomains = new Set(blocklistItems);
     blocklistPage = 0;
     renderBlocklistPage();
     renderWhitelist(response.whitelist || response.preview_whitelist || []);
@@ -210,7 +332,11 @@ confirmUpdateButton.addEventListener("click", async () => {
     const response = await fetch("/confirm-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ run_id: currentRunId }),
+      body: JSON.stringify({
+        run_id: currentRunId,
+        approved_domains: blocklistItems.filter((domain) => approvedDomains.has(domain)),
+        rejected_domains: blocklistItems.filter((domain) => !approvedDomains.has(domain)),
+      }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -220,7 +346,7 @@ confirmUpdateButton.addEventListener("click", async () => {
     }
 
     downloadBase.classList.remove("disabled");
-    setStatus(`Base atualizada. Adicionados: ${data.added_count}. Já existentes ignorados: ${data.ignored_existing_count}. Arquivo: ${data.updated_base_file}`, "success");
+    setStatus(`Base atualizada. Adicionados: ${data.added_count}. Rejeitados: ${data.rejected_count || 0}. Já existentes ignorados: ${data.ignored_existing_count}. Arquivo: ${data.updated_base_file}`, "success");
   } catch (_error) {
     setStatus("Erro de comunicação ao atualizar a base.", "error");
     confirmUpdateButton.disabled = false;
@@ -252,5 +378,14 @@ viewWhitelist.addEventListener("click", async () => {
 });
 
 closeWhitelist.addEventListener("click", () => whitelistDialog.close());
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
+});
+
+refreshHistory.addEventListener("click", () => {
+  historyLoaded = false;
+  loadAuditHistory();
+});
 
 updateDownloadLinks();

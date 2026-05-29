@@ -26,101 +26,142 @@
       </div>
     </header>
 
-    <section class="stats-grid" aria-label="Resumo do processamento">
-      <article class="stat-card">
-        <span>Domínios lidos</span>
-        <strong id="domainsExtracted">0</strong>
-      </article>
-      <article class="stat-card">
-        <span>Novos na base</span>
-        <strong id="newDomains">0</strong>
-      </article>
-      <article class="stat-card safe">
-        <span>Whitelist</span>
-        <strong id="whitelistCount">0</strong>
-      </article>
-      <article class="stat-card danger">
-        <span>Para incrementar</span>
-        <strong id="blocklistCount">0</strong>
-      </article>
+    <nav class="tabs" aria-label="Navegação principal">
+      <button class="tab-button active" type="button" data-tab-target="mainPanel">Painel Principal</button>
+      <button class="tab-button" type="button" data-tab-target="historyPanel">Histórico de Auditoria</button>
+    </nav>
+
+    <section id="mainPanel" class="tab-panel active">
+      <section class="stats-grid" aria-label="Resumo do processamento">
+        <article class="stat-card">
+          <span>Domínios lidos</span>
+          <strong id="domainsExtracted">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Novos na base</span>
+          <strong id="newDomains">0</strong>
+        </article>
+        <article class="stat-card safe">
+          <span>Whitelist</span>
+          <strong id="whitelistCount">0</strong>
+        </article>
+        <article class="stat-card danger">
+          <span>Para incrementar</span>
+          <strong id="blocklistCount">0</strong>
+        </article>
+      </section>
+
+      <section class="work-grid">
+        <article class="panel upload-panel">
+          <div class="panel-title">
+            <div>
+              <span class="eyebrow">Upload</span>
+              <h2>Arquivos para processamento</h2>
+            </div>
+            <span class="badge">PDF/TXT ate {{ max_file_size_mb }}MB</span>
+          </div>
+
+          <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Selecionar arquivos">
+            <input id="fileInput" type="file" name="files" multiple accept=".txt,.pdf">
+            <span class="drop-icon">+</span>
+            <strong>Arraste arquivos aqui</strong>
+            <small>ou clique para selecionar</small>
+          </div>
+
+          <div class="progress-area">
+            <div>
+              <span>Progresso</span>
+              <strong id="status" class="status">Aguardando arquivos.</strong>
+            </div>
+            <div class="progress" aria-label="Progresso de upload">
+              <span id="progressBar"></span>
+            </div>
+            <div id="warningsList" class="warnings-list" style="display: none;"></div>
+          </div>
+        </article>
+
+        <article class="panel queue-panel">
+          <div class="panel-title">
+            <div>
+              <span class="eyebrow">Fila</span>
+              <h2>Selecionados</h2>
+            </div>
+          </div>
+
+          <ul id="fileList" class="file-list">
+            <li class="empty-state">Nenhum arquivo selecionado.</li>
+          </ul>
+
+          <div class="actions">
+            <button id="processButton" class="primary-button" type="button" disabled>Extrair e comparar</button>
+            <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualização</button>
+            <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">Baixar novos</a>
+            <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">Baixar base atualizada</a>
+            <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatório</a>
+            <button id="viewWhitelist" class="secondary-button" type="button">Ver whitelist</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="results-grid">
+        <article class="panel result-panel">
+          <div class="panel-title compact">
+            <h2>Novos domínios para bloqueio</h2>
+            <span class="badge">novos_dominios.txt</span>
+          </div>
+          <div id="blocklistPreview" class="review-list">Sem processamento.</div>
+          <div class="preview-toolbar">
+            <span id="blocklistMeta">0 dominios</span>
+            <div>
+              <button id="blocklistPrev" class="ghost-button" type="button" disabled>Anterior</button>
+              <button id="blocklistNext" class="ghost-button" type="button" disabled>Proxima</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel result-panel">
+          <div class="panel-title compact">
+            <h2>Domínios protegidos</h2>
+            <span class="badge">whitelist.txt</span>
+          </div>
+          <pre id="whitelistPreview">Sem processamento.</pre>
+          <div class="preview-toolbar">
+            <span id="whitelistMeta">0 dominios</span>
+          </div>
+        </article>
+      </section>
     </section>
 
-    <section class="work-grid">
-      <article class="panel upload-panel">
+    <section id="historyPanel" class="tab-panel" hidden>
+      <article class="panel history-panel">
         <div class="panel-title">
           <div>
-            <span class="eyebrow">Upload</span>
-            <h2>Arquivos para processamento</h2>
+            <span class="eyebrow">Auditoria</span>
+            <h2>Histórico de lotes processados</h2>
           </div>
-          <span class="badge">PDF/TXT ate {{ max_file_size_mb }}MB</span>
+          <button id="refreshHistory" class="ghost-button" type="button">Atualizar</button>
         </div>
-
-        <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Selecionar arquivos">
-          <input id="fileInput" type="file" name="files" multiple accept=".txt,.pdf">
-          <span class="drop-icon">+</span>
-          <strong>Arraste arquivos aqui</strong>
-          <small>ou clique para selecionar</small>
-        </div>
-
-        <div class="progress-area">
-          <div>
-            <span>Progresso</span>
-            <strong id="status" class="status">Aguardando arquivos.</strong>
-          </div>
-          <div class="progress" aria-label="Progresso de upload">
-            <span id="progressBar"></span>
-          </div>
-          <div id="warningsList" class="warnings-list" style="display: none;"></div>
-        </div>
-      </article>
-
-      <article class="panel queue-panel">
-        <div class="panel-title">
-          <div>
-            <span class="eyebrow">Fila</span>
-            <h2>Selecionados</h2>
-          </div>
-        </div>
-
-        <ul id="fileList" class="file-list">
-          <li class="empty-state">Nenhum arquivo selecionado.</li>
-        </ul>
-
-        <div class="actions">
-          <button id="processButton" class="primary-button" type="button" disabled>Extrair e comparar</button>
-          <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualização</button>
-          <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">Baixar novos</a>
-          <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">Baixar base atualizada</a>
-          <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatório</a>
-          <button id="viewWhitelist" class="secondary-button" type="button">Ver whitelist</button>
-        </div>
-      </article>
-    </section>
-
-    <section class="results-grid">
-      <article class="panel result-panel">
-        <div class="panel-title compact">
-          <h2>Novos domínios para bloqueio</h2>
-          <span class="badge">novos_dominios.txt</span>
-        </div>
-        <pre id="blocklistPreview">Sem processamento.</pre>
-        <div class="preview-toolbar">
-          <span id="blocklistMeta">0 dominios</span>
-          <div>
-            <button id="blocklistPrev" class="ghost-button" type="button" disabled>Anterior</button>
-            <button id="blocklistNext" class="ghost-button" type="button" disabled>Proxima</button>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel result-panel">
-        <div class="panel-title compact">
-          <h2>Domínios protegidos</h2>
-          <span class="badge">whitelist.txt</span>
-        </div>
-        <pre id="whitelistPreview">Sem processamento.</pre>
-        <div class="preview-toolbar">
-          <span id="whitelistMeta">0 dominios</span>
+        <div id="historyStatus" class="history-status">Abra esta aba para carregar o histórico.</div>
+        <div class="table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Run ID</th>
+                <th>Arquivos</th>
+                <th>Lidos</th>
+                <th>Novos</th>
+                <th>Whitelist</th>
+                <th>Bloqueio</th>
+                <th>Duplicatas</th>
+                <th>Tempo</th>
+                <th>Avisos</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr><td colspan="10">Histórico ainda não carregado.</td></tr>
+            </tbody>
+          </table>
         </div>
       </article>
     </section>
