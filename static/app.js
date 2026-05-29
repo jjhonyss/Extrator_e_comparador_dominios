@@ -19,6 +19,7 @@ const blocklistMeta = document.querySelector("#blocklistMeta");
 const whitelistMeta = document.querySelector("#whitelistMeta");
 const blocklistPrev = document.querySelector("#blocklistPrev");
 const blocklistNext = document.querySelector("#blocklistNext");
+const warningsList = document.querySelector("#warningsList");
 
 let selectedFiles = [];
 let blocklistItems = [];
@@ -95,7 +96,11 @@ function acceptFiles(files) {
   renderWhitelist([]);
   currentRunId = null;
   updateDownloadLinks();
-  setStatus(selectedFiles.length ? "Arquivos prontos para processamento." : "Nenhum arquivo valido selecionado.");
+  if (warningsList) {
+    warningsList.style.display = "none";
+    warningsList.innerHTML = "";
+  }
+  setStatus(selectedFiles.length ? "Arquivos prontos para processamento." : "Nenhum arquivo válido selecionado.");
 }
 
 dropZone.addEventListener("click", () => fileInput.click());
@@ -175,8 +180,18 @@ processButton.addEventListener("click", () => {
     downloadBlocklist.classList.remove("disabled");
     downloadReport.classList.remove("disabled");
     confirmUpdateButton.disabled = !response.pending_update_available;
-    const warningText = response.errors.length ? ` Avisos: ${response.errors.slice(0, 2).join(" | ")}` : "";
-    setStatus(`Extracao concluida em ${response.elapsed_seconds}s. Ja existentes descartados: ${response.existing_discarded_count}. Revise e confirme para atualizar a base.${warningText}`, response.errors.length ? "warning" : "success");
+
+    if (warningsList) {
+      if (response.errors && response.errors.length > 0) {
+        warningsList.style.display = "block";
+        warningsList.innerHTML = `<strong>Avisos do processamento:</strong><br>${response.errors.map(err => `⚠️ ${err}`).join('<br>')}`;
+      } else {
+        warningsList.style.display = "none";
+        warningsList.innerHTML = "";
+      }
+    }
+
+    setStatus(`Extração concluída em ${response.elapsed_seconds}s. Descartados: ${response.existing_discarded_count}. Revise e confirme para atualizar a base.`, "success");
   });
 
   xhr.addEventListener("error", () => {
@@ -205,9 +220,9 @@ confirmUpdateButton.addEventListener("click", async () => {
     }
 
     downloadBase.classList.remove("disabled");
-    setStatus(`Base atualizada. Adicionados: ${data.added_count}. Ja existentes ignorados: ${data.ignored_existing_count}. Arquivo: ${data.updated_base_file}`, "success");
+    setStatus(`Base atualizada. Adicionados: ${data.added_count}. Já existentes ignorados: ${data.ignored_existing_count}. Arquivo: ${data.updated_base_file}`, "success");
   } catch (_error) {
-    setStatus("Erro de comunicacao ao atualizar a base.", "error");
+    setStatus("Erro de comunicação ao atualizar a base.", "error");
     confirmUpdateButton.disabled = false;
   }
 });

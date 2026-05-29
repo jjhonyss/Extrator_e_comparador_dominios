@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Domain Guard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="dark">
@@ -13,19 +16,19 @@
         <span>DG</span>
         <div>
           <strong>Domain Guard</strong>
-          <small>Extrator e comparador de dominios</small>
+          <small>Extrator e comparador de domínios</small>
         </div>
       </a>
       <div class="header-actions">
         <span class="badge">Local</span>
-        <span class="badge">Confirmacao manual</span>
+        <span class="badge">Confirmação manual</span>
         <button id="themeToggle" class="ghost-button" type="button">Modo claro</button>
       </div>
     </header>
 
     <section class="stats-grid" aria-label="Resumo do processamento">
       <article class="stat-card">
-        <span>Dominios lidos</span>
+        <span>Domínios lidos</span>
         <strong id="domainsExtracted">0</strong>
       </article>
       <article class="stat-card">
@@ -67,6 +70,7 @@
           <div class="progress" aria-label="Progresso de upload">
             <span id="progressBar"></span>
           </div>
+          <div id="warningsList" class="warnings-list" style="display: none;"></div>
         </div>
       </article>
 
@@ -84,10 +88,10 @@
 
         <div class="actions">
           <button id="processButton" class="primary-button" type="button" disabled>Extrair e comparar</button>
-          <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualizacao</button>
+          <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualização</button>
           <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">Baixar novos</a>
           <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">Baixar base atualizada</a>
-          <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatorio</a>
+          <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatório</a>
           <button id="viewWhitelist" class="secondary-button" type="button">Ver whitelist</button>
         </div>
       </article>
@@ -96,7 +100,7 @@
     <section class="results-grid">
       <article class="panel result-panel">
         <div class="panel-title compact">
-          <h2>Novos dominios para bloqueio</h2>
+          <h2>Novos domínios para bloqueio</h2>
           <span class="badge">novos_dominios.txt</span>
         </div>
         <pre id="blocklistPreview">Sem processamento.</pre>
@@ -111,7 +115,7 @@
 
       <article class="panel result-panel">
         <div class="panel-title compact">
-          <h2>Dominios protegidos</h2>
+          <h2>Domínios protegidos</h2>
           <span class="badge">whitelist.txt</span>
         </div>
         <pre id="whitelistPreview">Sem processamento.</pre>
