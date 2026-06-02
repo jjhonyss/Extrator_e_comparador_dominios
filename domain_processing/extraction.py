@@ -11,6 +11,7 @@ DOMAIN_PATTERNS = [
 
 NOISE_DOMAINS = {
     "t.com",
+    "to.com",
 }
 
 INVALID_LINE_SEPARATORS = {"|"}
@@ -283,9 +284,10 @@ def extract_txt(path: Path) -> FileExtraction:
     result = FileExtraction(filename=path.name, methods=["txt"])
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
-        ignored_lines = sum(1 for line in text.splitlines() if has_invalid_domain_separator(line))
-        result.domains, result.duplicate_count = extract_domains_from_text(text)
-        result.raw_count = len(result.domains) + result.duplicate_count
+        lines = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+        ignored_lines = sum(1 for line in lines if has_invalid_domain_separator(line))
+        result.domains, result.duplicate_count, _valid_count = extract_domains_from_lines(lines)
+        result.raw_count = len(lines)
         if ignored_lines:
             result.errors.append(f"Linhas ignoradas por separador invalido: {ignored_lines}")
     except OSError as exc:
@@ -418,6 +420,29 @@ def load_domain_file(path: Path) -> set[str]:
         if domain:
             domains.add(domain)
     return domains
+
+
+def load_base_reference_domains(path: Path) -> tuple[set[str], int]:
+    if not path.exists():
+        return set(), 0
+
+    domains: set[str] = set()
+    entry_count = 0
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        clean = line.strip()
+        if not clean or clean.startswith("#"):
+            continue
+
+        entry_count += 1
+        domains.add(clean.lower())
+        normalized = normalize_domain(clean)
+        if normalized:
+            domains.add(normalized)
+
+        extracted, _duplicates = extract_domains_from_text(clean)
+        domains.update(extracted)
+
+    return domains, entry_count
 
 
 def normalize_base_domain(value: str) -> str | None:

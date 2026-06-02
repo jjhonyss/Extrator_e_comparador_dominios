@@ -146,10 +146,12 @@ def build_report(
     whitelist: list[dict],
     existing_discarded: set[str],
     elapsed_seconds: float,
+    existing_count: int | None = None,
 ) -> str:
     generated_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     duplicate_total = sum(item.duplicate_count for item in file_results)
     raw_total = sum(item.raw_count or len(item.domains) for item in file_results)
+    existing_total = len(existing) if existing_count is None else existing_count
     errors = [f"{item.filename}: {error}" for item in file_results for error in item.errors]
 
     lines = [
@@ -170,7 +172,7 @@ def build_report(
             "ESTATISTICAS",
             f"Total de dominios lidos: {raw_total}",
             f"Total de dominios extraidos unicos: {len(extracted)}",
-            f"Total de dominios existentes na base: {len(existing)}",
+            f"Total de dominios existentes na base: {existing_total}",
             f"Total de dominios novos: {len(new_domains)}",
             f"Total de dominios em whitelist: {len(whitelist)}",
             f"Total de dominios para bloqueio: {len(blocklist)}",
@@ -202,7 +204,7 @@ def build_report(
                     "files": [item.filename for item in file_results],
                     "read_total": raw_total,
                     "extracted_total": len(extracted),
-                    "existing_total": len(existing),
+                    "existing_total": existing_total,
                     "new_total": len(new_domains),
                     "whitelist_total": len(whitelist),
                     "blocklist_total": len(blocklist),

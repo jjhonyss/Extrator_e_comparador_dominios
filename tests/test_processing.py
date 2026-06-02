@@ -14,6 +14,7 @@ from processing import (
     extract_domains_from_pdf_text,
     extract_domains_from_text,
     load_base_entries,
+    load_base_reference_domains,
     load_domain_file,
     generate_run_id,
     get_run_file_paths,
@@ -36,6 +37,7 @@ class ProcessingTests(unittest.TestCase):
         self.assertIsNone(normalize_domain("invalid_domain"))
         self.assertIsNone(normalize_domain("example.123"))
         self.assertIsNone(normalize_domain("t.com"))
+        self.assertIsNone(normalize_domain("to.com"))
 
     def test_normalize_base_domain_is_strict_with_malformed_entries(self):
         self.assertEqual(normalize_base_domain("example.com"), "example.com")
@@ -44,6 +46,17 @@ class ProcessingTests(unittest.TestCase):
         self.assertIsNone(normalize_base_domain("example.com:2087"))
         self.assertIsNone(normalize_base_domain("example.com/path"))
         self.assertIsNone(normalize_base_domain("example.com."))
+
+    def test_load_base_reference_domains_keeps_authoritative_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "base.txt"
+            path.write_text("pc.537k7.com:8888\nbetl 8k.app\n", encoding="utf-8")
+
+            domains, entry_count = load_base_reference_domains(path)
+
+        self.assertEqual(entry_count, 2)
+        self.assertIn("pc.537k7.com", domains)
+        self.assertIn("8k.app", domains)
 
     def test_extract_domains_from_text_deduplicates(self):
         text = "Bloquear bet365.com e bet365.com. Preservar anatel.gov.br"
@@ -159,6 +172,15 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(result.domains, {"casino-online.net", "instagram.com"})
         self.assertFalse(result.errors)
 
+    def test_extract_txt_counts_input_lines_without_partial_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "entrada.txt"
+            path.write_text("betl 8k.app\npc.salto-alto777bet\nvalidobet.bet\n", encoding="utf-8")
+            result = extract_txt(path)
+
+        self.assertEqual(result.raw_count, 3)
+        self.assertEqual(result.domains, {"validobet.bet"})
+
     def test_compare_new_domains(self):
         extracted = {"a.com", "b.com", "c.com"}
         existing = {"a.com", "c.com"}
@@ -170,6 +192,7 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(classify_sensitive("facebook.com")[1], "REDES_SOCIAIS")
         self.assertEqual(classify_sensitive("t.co")[1], "REDES_SOCIAIS")
         self.assertEqual(classify_sensitive("bcb.gov.br")[1], "BANCOS")
+        self.assertEqual(classify_sensitive("abta.org.br")[1], "ORGAOS_PUBLICOS")
         self.assertEqual(classify_sensitive("sub.instagram.com")[1], "REDES_SOCIAIS")
         self.assertEqual(classify_sensitive("bet365.com"), (False, None, None))
         self.assertEqual(classify_sensitive("jogovip.bet"), (False, None, None))
@@ -345,11 +368,43 @@ class ProcessingTests(unittest.TestCase):
             self.assertTrue(run_paths["manifest"].exists())
             self.assertEqual(summary["artifacts"]["pending_update"], str(run_paths["pending_update"]))
 
+    def test_process_files_compares_against_authoritative_base_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = {
+                "BASE_FILE_PATH": root / "base" / "base_atual.txt",
+                "WHITELIST_PATH": root / "output" / "whitelist.txt",
+                "OUTPUT_PATH": root / "output" / "novos_dominios.txt",
+                "REPORT_PATH": root / "output" / "relatorio.txt",
+                "PENDING_UPDATE_PATH": root / "output" / "pendente_atualizacao.json",
+                "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
+                "UPLOAD_DIR": root / "uploads",
+                "AUDIT_DIR": root / "audits",
+                "BACKUP_DIR": root / "backups",
+                "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
+                "ENABLE_OCR": False,
+                "OCR_LANGUAGE": "por+eng",
+                "OCR_ONLY_IF_NO_DOMAINS": True,
+                "BACKUP_BEFORE_UPDATE": True,
+            }
+            config["BASE_FILE_PATH"].parent.mkdir(parents=True)
+            config["BASE_FILE_PATH"].write_text("pc.537k7.com:8888\nbetl 8k.app\n", encoding="utf-8")
+            entrada = root / "uploads" / "entrada.txt"
+            entrada.parent.mkdir(parents=True)
+            entrada.write_text("pc.537k7.com:8888\nbetl 8k.app\nnovoalvo.bet\n", encoding="utf-8")
+
+            summary = process_files([entrada], config, generate_run_id())
+
+        self.assertEqual(summary["existing_domains"], 2)
+        self.assertEqual(summary["blocklist"], ["novoalvo.bet"])
+
     def test_lista_b_fixture_matches_expected_increment_count(self):
         fixture = Path("fixtures") / "Lista B.txt"
         self.assertTrue(fixture.exists())
         result = extract_txt(fixture)
-        self.assertEqual(result.raw_count, 39597)
+        self.assertEqual(result.raw_count, 39598)
         self.assertEqual(len(result.domains), 39578)
         self.assertIn("5757.win", result.domains)
 

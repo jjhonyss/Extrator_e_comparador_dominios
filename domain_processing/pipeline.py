@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .classification import classify_for_base_update
-from .extraction import ensure_directories, extract_file, load_domain_file
+from .extraction import ensure_directories, extract_file, load_base_reference_domains
 from .outputs import build_report, save_pending_update, write_output_files
 from .runtime import write_run_manifest
 
@@ -19,11 +19,21 @@ def process_files(paths: list[Path], config: dict, run_id: str) -> dict:
         file_results = list(executor.map(lambda path: extract_file(path, config), paths))
 
     extracted = set().union(*(item.domains for item in file_results)) if file_results else set()
-    existing = load_domain_file(Path(config["BASE_FILE_PATH"]))
+    existing, existing_count = load_base_reference_domains(Path(config["BASE_FILE_PATH"]))
     blocklist, whitelist, existing_discarded = classify_for_base_update(extracted, existing)
     new_domains = set(blocklist)
     elapsed = time.perf_counter() - start
-    report = build_report(file_results, extracted, existing, new_domains, blocklist, whitelist, existing_discarded, elapsed)
+    report = build_report(
+        file_results,
+        extracted,
+        existing,
+        new_domains,
+        blocklist,
+        whitelist,
+        existing_discarded,
+        elapsed,
+        existing_count,
+    )
 
     artifact_paths = write_output_files(blocklist, whitelist, report, config, run_id)
     pending_paths = save_pending_update(blocklist, config, run_id)
@@ -44,7 +54,7 @@ def process_files(paths: list[Path], config: dict, run_id: str) -> dict:
         ],
         "domains_extracted": sum(item.raw_count or len(item.domains) for item in file_results),
         "domains_unique": len(extracted),
-        "existing_domains": len(existing),
+        "existing_domains": existing_count,
         "new_domains": len(new_domains),
         "whitelist_count": len(whitelist),
         "blocklist_count": len(blocklist),

@@ -54,6 +54,7 @@ WHITELIST_PATTERNS = {
         "tre-*.jus.br",
     ],
     "ORGAOS_PUBLICOS": [
+        "abta.org.br",
         "ibge.gov.br",
         "inep.gov.br",
         "anvisa.gov.br",
