@@ -1,0 +1,426 @@
+GUIA DE EVOLUCAO PARA VM E LIBERACAO INTERNA
+
+Objetivo
+
+Este documento organiza as etapas de evolucao do projeto para:
+
+1. estruturar melhor o sistema antes da subida para VM
+2. preparar a aplicacao para uso interno controlado
+3. servir como guia de continuidade para futuras manutencoes
+4. permitir que outra pessoa assuma o projeto com contexto suficiente
+
+Contexto Operacional
+
+O sistema sera utilizado de forma interna e controlada.
+
+Cenario previsto:
+
+1. hospedagem em uma VM interna
+2. acesso apenas pela rede interna
+3. no maximo 5 analistas utilizando a plataforma
+4. uso voltado para extracao, revisao e atualizacao da base operacional
+5. base final usada como referencia para operacao posterior
+
+Observacao importante:
+
+O projeto nao esta sendo tratado como produto publico. Ele e uma ferramenta operacional interna. Mesmo assim, como lida com upload, extracao e atualizacao da base, precisa de previsibilidade, rastreabilidade e controle minimo de acesso antes da liberacao definitiva.
+
+Visao Geral Das Etapas
+
+O caminho recomendado e dividido em duas fases principais:
+
+1. Antes da VM
+   Foco em estabilidade, confiabilidade tecnica e endurecimento do fluxo operacional.
+
+2. Antes da liberacao para os analistas
+   Foco em controle de acesso, auditoria por usuario, operacao interna e publicacao segura na rede.
+
+====================================================================
+ETAPA 1 - ANTES DA VM
+====================================================================
+
+Objetivo da etapa
+
+Deixar a aplicacao tecnicamente estavel, previsivel e pronta para rodar em ambiente centralizado sem aumentar risco operacional.
+
+1. Fechar estabilidade funcional
+
+Objetivo:
+
+Garantir que o fluxo principal funcione de ponta a ponta sem ambiguidade.
+
+Fluxo principal que precisa estar confiavel:
+
+1. upload de arquivos
+2. extracao de dominios
+3. comparacao com a base
+4. separacao entre whitelist e bloqueio
+5. revisao manual
+6. confirmacao da atualizacao da base
+
+Pontos a validar:
+
+1. extracao de TXT consistente
+2. extracao de PDF consistente
+3. comportamento previsivel nas heuristicas de reconstrucao de dominios
+4. consolidacao correta de dominios novos
+5. atualizacao da base refletindo exatamente o que foi aprovado
+6. ausencia de duplicidade indevida
+
+Entregaveis esperados:
+
+1. falhas funcionais abertas corrigidas
+2. fluxo principal revisado de ponta a ponta
+3. confirmacao de que a base atualizada esta coerente com a revisao feita
+
+2. Reforcar testes automatizados
+
+Objetivo:
+
+Reduzir risco de regressao ao mexer no motor ou no fluxo de atualizacao.
+
+Foco recomendado:
+
+1. aumentar cobertura com casos reais em fixtures
+2. criar regressao para PDFs problematicos ja conhecidos
+3. testar cenarios de base historica com entradas imperfeitas
+4. testar fluxo de aprovacao e rejeicao na atualizacao da base
+5. testar as rotas principais da API
+
+Rotas e funcoes prioritarias:
+
+1. process_files
+2. confirm_pending_update
+3. /process
+4. /confirm-update
+5. /audit-history
+
+Entregaveis esperados:
+
+1. suite de regressao mais forte
+2. cenarios reais protegidos por teste
+3. maior confianca para evoluir parser e regras
+
+3. Melhorar rastreabilidade por execucao
+
+Objetivo:
+
+Fazer cada processamento deixar evidencia suficiente para diagnostico e auditoria posterior.
+
+O que revisar:
+
+1. consistencia do manifesto por run_id
+2. qualidade das informacoes retornadas no resumo final
+3. clareza dos artefatos gerados por execucao
+4. qualidade dos avisos e erros registrados
+
+Informacoes que devem ficar claras por execucao:
+
+1. arquivos processados
+2. metodos usados na extracao
+3. total de dominios lidos
+4. total de dominios unicos
+5. total descartado por ja existir na base
+6. total enviado para whitelist
+7. total aprovado para bloqueio
+8. erros e avisos relevantes
+
+Entregaveis esperados:
+
+1. run_id com manifesto consistente
+2. artefatos claros por lote
+3. base melhor para diagnostico futuro
+
+4. Revisar regras sensiveis do motor
+
+Objetivo:
+
+Tomar decisoes explicitas sobre comportamentos que podem impactar operacao e manutencao.
+
+Pontos que precisam estar definidos:
+
+1. www.site.com e site.com devem continuar sendo tratados como diferentes ou equivalentes?
+2. entradas historicas com porta, path ou formato imperfeito na base serao apenas toleradas ou saneadas?
+3. dominio rejeitado manualmente deve ser apenas registrado ou deve impedir reentrada futura?
+4. a whitelist continuara em codigo nesta fase ou ja sera externalizada?
+
+Observacao tecnica:
+
+Whitelist em arquivo configuravel e uma melhoria importante, mas nao precisa necessariamente entrar antes da VM se isso atrasar a estabilizacao funcional.
+
+Entregaveis esperados:
+
+1. regras sensiveis documentadas
+2. comportamento do motor mais explicito
+3. menos decisao implicita escondida no codigo
+
+5. Melhorar a revisao manual na interface
+
+Objetivo:
+
+Deixar o fluxo de aprovacao e rejeicao mais operacional para lotes maiores.
+
+Melhorias desejadas:
+
+1. busca ou filtro na lista de dominios
+2. melhor visualizacao de aprovados e rejeitados
+3. clareza sobre total aprovado, rejeitado e pendente
+4. navegacao mais eficiente em lotes grandes
+5. possivel selecao em lote no futuro
+
+Entregaveis esperados:
+
+1. revisao manual mais clara
+2. menor chance de erro operacional
+3. melhor uso da interface em cenarios reais
+
+6. Preparar configuracao para ambiente
+
+Objetivo:
+
+Organizar o sistema para sair do modo estritamente local e ficar pronto para implantacao em VM.
+
+Pontos a revisar:
+
+1. configuracoes por ambiente
+2. caminhos obrigatorios de diretorios e arquivos
+3. tamanho maximo de upload
+4. comportamento quando dependencias de PDF ou OCR falharem
+5. mensagens de erro mais claras para operacao
+
+Entregaveis esperados:
+
+1. configuracao mais organizada
+2. menor acoplamento ao ambiente de desenvolvimento
+3. deploy em VM mais previsivel
+
+Critério de saida da Etapa 1
+
+A VM so deve entrar quando estes pontos estiverem atendidos:
+
+1. processamento estavel
+2. fluxo principal confiavel
+3. testes cobrindo os principais cenarios
+4. atualizacao da base consistente
+5. artefatos por execucao claros e rastreaveis
+6. operacao manual entendivel
+
+====================================================================
+ETAPA 2 - ANTES DA LIBERACAO PARA OS ANALISTAS
+====================================================================
+
+Objetivo da etapa
+
+Transformar a aplicacao em uma ferramenta interna compartilhada, com controle de acesso, responsabilidade por usuario e operacao segura na rede interna.
+
+1. Adicionar login
+
+Objetivo:
+
+Garantir que o acesso a plataforma seja feito apenas por usuarios autorizados.
+
+Itens minimos:
+
+1. tela de login
+2. sessao autenticada
+3. logout
+4. armazenamento seguro de senha com hash
+
+Resultado esperado:
+
+1. acesso restrito aos usuarios cadastrados
+2. base inicial para auditoria por usuario
+
+2. Criar perfis simples
+
+Objetivo:
+
+Separar quem pode apenas operar da interface de quem pode confirmar mudancas na base.
+
+Perfis recomendados:
+
+1. analista
+   pode processar arquivos, revisar resultados e baixar artefatos
+
+2. aprovador ou admin
+   pode confirmar atualizacao da base
+
+Resultado esperado:
+
+1. reducao do risco operacional
+2. separacao minima de responsabilidade
+
+3. Adicionar auditoria por usuario
+
+Objetivo:
+
+Complementar a rastreabilidade por run_id com a identificacao de quem executou cada acao relevante.
+
+Informacoes minimas a registrar:
+
+1. usuario que fez login
+2. usuario que iniciou o processamento
+3. usuario que confirmou a atualizacao da base
+4. run_id associado
+5. data e hora
+6. quantidade aprovada e rejeitada
+
+Resultado esperado:
+
+1. rastreabilidade por lote e por pessoa
+2. maior clareza em caso de erro ou duvida operacional
+
+4. Preparar uso em VM
+
+Objetivo:
+
+Garantir que a aplicacao rode de forma estavel, persistente e acessivel na rede interna.
+
+Pontos a fechar:
+
+1. definir como a aplicacao sera servida na VM
+2. garantir inicializacao automatica
+3. validar acesso pela rede interna
+4. revisar permissoes de pasta
+5. garantir persistencia dos diretorios operacionais
+
+Diretorios sensiveis que precisam de persistencia:
+
+1. base/
+2. output/
+3. uploads/
+4. audits/
+5. logs/
+6. backups/
+
+Resultado esperado:
+
+1. aplicacao disponivel internamente
+2. dados operacionais preservados entre reinicios
+3. ambiente pronto para uso controlado
+
+5. Definir rotina operacional
+
+Objetivo:
+
+Evitar que o uso compartilhado dependa de conhecimento informal.
+
+Pontos que precisam estar definidos:
+
+1. quem pode atualizar a base
+2. como revisar um lote antes de aprovar
+3. o que fazer em caso de erro na execucao
+4. como agir se um dominio for aprovado ou rejeitado por engano
+5. como restaurar backup se necessario
+
+Resultado esperado:
+
+1. operacao mais padronizada
+2. menor dependencia de memoria individual
+
+6. Fechar backup e recuperacao
+
+Objetivo:
+
+Proteger a base operacional e permitir retorno rapido em caso de erro.
+
+Pontos minimos:
+
+1. backup automatico da base antes de update
+2. rotina de backup da VM ou da pasta do projeto
+3. procedimento simples de restauracao
+
+Resultado esperado:
+
+1. menor risco de perda operacional
+2. maior seguranca para aprovacoes de lote
+
+7. Validar o cenario real de uso
+
+Objetivo:
+
+Testar o sistema no formato mais proximo possivel da operacao real antes de liberar oficialmente.
+
+Validacoes recomendadas:
+
+1. criar usuarios reais ou de teste
+2. validar perfis diferentes
+3. testar fluxo completo pela rede interna
+4. testar confirmacao da base com usuario aprovador
+5. validar se a rastreabilidade esta suficiente
+
+Resultado esperado:
+
+1. maior confianca antes da liberacao
+2. ajuste fino com base em uso real controlado
+
+Critério de saida da Etapa 2
+
+A liberacao para os analistas deve acontecer somente quando:
+
+1. login estiver funcionando
+2. perfis estiverem respeitados
+3. auditoria minima por usuario estiver ativa
+4. acesso via rede interna estiver validado
+5. backup e restauracao estiverem definidos
+6. fluxo operacional estiver claro
+
+====================================================================
+BACKLOG PRIORIZADO
+====================================================================
+
+Ordem recomendada de execucao:
+
+1. corrigir falhas funcionais abertas
+2. endurecer testes do motor e da atualizacao da base
+3. melhorar rastreabilidade por run_id
+4. revisar regras sensiveis de normalizacao, base e whitelist
+5. melhorar a revisao manual na interface
+6. preparar configuracao para ambiente VM
+7. implementar login
+8. implementar perfis
+9. implementar auditoria por usuario
+10. validar deploy interno e operacao real
+
+====================================================================
+PONTOS INADIAVEIS ANTES DA LIBERACAO
+====================================================================
+
+Os pontos abaixo sao considerados obrigatorios antes da liberacao oficial para os analistas:
+
+1. login
+2. perfil para confirmar atualizacao da base
+3. auditoria minima por usuario
+4. backup confiavel
+
+Sem esses itens, a liberacao interna passa a ter risco operacional desnecessario, mesmo com poucos usuarios.
+
+====================================================================
+ORGANIZACAO SUGERIDA DO TRABALHO
+====================================================================
+
+Para tocar essa evolucao com clareza, o trabalho pode ser organizado em tres blocos:
+
+1. Estabilidade
+   Correcao de falhas, endurecimento de testes, revisao de regras e melhoria de rastreabilidade.
+
+2. Preparacao de ambiente
+   Configuracao, validacao para VM, persistencia de dados, backup e inicializacao.
+
+3. Liberacao controlada
+   Login, perfis, auditoria por usuario, documentacao operacional e validacao final.
+
+====================================================================
+RESUMO FINAL
+====================================================================
+
+Este guia parte do principio de que o sistema sera uma ferramenta interna, hospedada em VM, acessada por poucos analistas e utilizada para processamento controlado de dominios com atualizacao da base operacional.
+
+A ordem correta de maturacao do projeto e:
+
+1. estabilizar o nucleo funcional
+2. preparar o sistema para rodar bem na VM
+3. adicionar controle de acesso e auditoria
+4. liberar para os analistas somente depois da validacao completa
+
+Esse documento deve ser usado como referencia para continuidade do projeto, seja por quem ja conhece o contexto, seja por outra pessoa que venha assumir a evolucao futuramente.
