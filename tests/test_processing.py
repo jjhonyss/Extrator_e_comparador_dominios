@@ -5,6 +5,8 @@ from contextlib import closing
 from pathlib import Path
 
 from processing import (
+    apply_target_corrections,
+    block_target_domain,
     build_report,
     classify_sensitive,
     compare_new_domains,
@@ -13,11 +15,17 @@ from processing import (
     extract_domains_from_lines,
     extract_domains_from_pdf_text,
     extract_domains_from_text,
+    is_specific_block_target,
     load_base_entries,
+    load_base_reference_state,
     load_base_reference_domains,
     load_domain_file,
+    load_target_corrections,
+    normalize_block_target,
+    read_run_manifest,
     generate_run_id,
     get_run_file_paths,
+    run_updated_base_path,
     extract_txt,
     merge_wrapped_domain_lines,
     normalize_base_domain,
@@ -39,6 +47,31 @@ class ProcessingTests(unittest.TestCase):
         self.assertIsNone(normalize_domain("t.com"))
         self.assertIsNone(normalize_domain("to.com"))
 
+    def test_normalize_block_target_preserves_specific_url_path(self):
+        self.assertEqual(normalize_block_target("https://Erome.com/a/2qHOEUJi"), "erome.com/a/2qHOEUJi")
+        self.assertEqual(normalize_block_target("erome.com/lobato?tt=posts"), "erome.com/lobato?tt=posts")
+        self.assertEqual(block_target_domain("erome.com/a/2qHOEUJi"), "erome.com")
+        self.assertTrue(is_specific_block_target("erome.com/a/2qHOEUJi"))
+
+    def test_load_target_corrections_reads_manual_mapping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "correcoes.txt"
+            path.write_text("0705x.bet => 05x.bet\n", encoding="utf-8")
+            corrections = load_target_corrections({"TARGET_CORRECTIONS_PATH": path})
+
+        self.assertEqual(corrections, {"0705x.bet": "05x.bet"})
+
+    def test_apply_target_corrections_rewrites_only_listed_cases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "correcoes.txt"
+            path.write_text("0705x.bet => 05x.bet\n", encoding="utf-8")
+            corrected = apply_target_corrections(
+                {"0705x.bet", "07bet.com"},
+                {"TARGET_CORRECTIONS_PATH": path},
+            )
+
+        self.assertEqual(corrected, {"05x.bet", "07bet.com"})
+
     def test_normalize_base_domain_is_strict_with_malformed_entries(self):
         self.assertEqual(normalize_base_domain("example.com"), "example.com")
         self.assertEqual(normalize_base_domain("www.example.com"), "example.com")
@@ -57,6 +90,17 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(entry_count, 2)
         self.assertIn("pc.537k7.com", domains)
         self.assertIn("8k.app", domains)
+
+    def test_load_base_reference_state_keeps_specific_paths_without_promoting_domain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "base.txt"
+            path.write_text("erome.com/a/2qHOEUJi\n", encoding="utf-8")
+
+            exact_targets, comparable_domains, entry_count = load_base_reference_state(path)
+
+        self.assertEqual(entry_count, 1)
+        self.assertEqual(exact_targets, {"erome.com/a/2qHOEUJi"})
+        self.assertEqual(comparable_domains, set())
 
     def test_extract_domains_from_text_deduplicates(self):
         text = "Bloquear bet365.com e bet365.com. Preservar anatel.gov.br"
@@ -101,6 +145,16 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(domains, {"bet365.com"})
         self.assertEqual(duplicates, 1)
         self.assertEqual(raw_count, 2)
+
+    def test_extract_domains_from_lines_preserves_specific_url_targets(self):
+        domains, duplicates, raw_count = extract_domains_from_lines([
+            "erome.com/a/2qHOEUJi",
+            "erome.com/lobato?tt=posts",
+            "erome.com/a/2qHOEUJi",
+        ])
+        self.assertEqual(domains, {"erome.com/a/2qHOEUJi", "erome.com/lobato?tt=posts"})
+        self.assertEqual(duplicates, 1)
+        self.assertEqual(raw_count, 3)
 
     def test_merge_wrapped_domain_lines_rebuilds_split_punycode(self):
         lines = merge_wrapped_domain_lines(["xn--kksrenoveringlinkping-", "hecq.nu", "t.com"])
@@ -172,6 +226,17 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(result.domains, {"casino-online.net", "instagram.com"})
         self.assertFalse(result.errors)
 
+    def test_extract_txt_applies_manual_corrections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "entrada.txt"
+            corrections = root / "correcoes.txt"
+            path.write_text("0705x.bet\n07bet.com\n", encoding="utf-8")
+            corrections.write_text("0705x.bet => 05x.bet\n", encoding="utf-8")
+            result = extract_txt(path, {"TARGET_CORRECTIONS_PATH": corrections})
+
+        self.assertEqual(result.domains, {"05x.bet", "07bet.com"})
+
     def test_extract_txt_counts_input_lines_without_partial_matches(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "entrada.txt"
@@ -227,6 +292,26 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(blocklist, ["bet365.com"])
         self.assertEqual(whitelist[0]["domain"], "instagram.com")
         self.assertEqual(existing_discarded, {"already.com"})
+
+    def test_classify_for_base_update_keeps_specific_url_when_only_specific_path_exists(self):
+        blocklist, whitelist, existing_discarded = classify_for_base_update(
+            {"erome.com", "erome.com/a/2qHOEUJi"},
+            {"erome.com/a/1aaaaaaa"},
+            set(),
+        )
+        self.assertEqual(blocklist, ["erome.com", "erome.com/a/2qHOEUJi"])
+        self.assertEqual(whitelist, [])
+        self.assertEqual(existing_discarded, set())
+
+    def test_classify_for_base_update_discards_specific_url_when_domain_is_already_blocked(self):
+        blocklist, whitelist, existing_discarded = classify_for_base_update(
+            {"erome.com/a/2qHOEUJi"},
+            {"erome.com"},
+            {"erome.com"},
+        )
+        self.assertEqual(blocklist, [])
+        self.assertEqual(whitelist, [])
+        self.assertEqual(existing_discarded, {"erome.com/a/2qHOEUJi"})
 
     def test_confirm_pending_update_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -367,6 +452,70 @@ class ProcessingTests(unittest.TestCase):
             self.assertTrue(run_paths["pending_update"].exists())
             self.assertTrue(run_paths["manifest"].exists())
             self.assertEqual(summary["artifacts"]["pending_update"], str(run_paths["pending_update"]))
+
+    def test_confirm_pending_update_records_run_specific_updated_base(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = {
+                "BASE_FILE_PATH": root / "base" / "base_atual.txt",
+                "PENDING_UPDATE_PATH": root / "output" / "pendente_atualizacao.json",
+                "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
+                "UPLOAD_DIR": root / "uploads",
+                "AUDIT_DIR": root / "audits",
+                "BACKUP_DIR": root / "backups",
+                "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
+                "BACKUP_BEFORE_UPDATE": True,
+            }
+            config["BASE_FILE_PATH"].parent.mkdir(parents=True)
+            config["OUTPUT_DIR"].mkdir()
+            config["RUNS_DIR"].mkdir(parents=True)
+            config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
+            run_id = "run_teste"
+            run_paths = get_run_file_paths(config, run_id)
+            run_paths["run_dir"].mkdir(parents=True)
+            run_paths["manifest"].write_text('{"run_id": "run_teste"}', encoding="utf-8")
+            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["b.com"]}', encoding="utf-8")
+
+            result = confirm_pending_update(config, run_id=run_id)
+            manifest = read_run_manifest(config, run_id)
+            updated_path = run_updated_base_path(config, run_id)
+
+        self.assertEqual(result["run_id"], run_id)
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["base_update"]["updated_base_file"], result["updated_base_file"])
+        self.assertIsNotNone(updated_path)
+        self.assertEqual(updated_path.name, result["updated_base_file"])
+
+    def test_confirm_pending_update_uses_run_specific_updated_base_when_no_new_domains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = {
+                "BASE_FILE_PATH": root / "base" / "base_atual.txt",
+                "PENDING_UPDATE_PATH": root / "output" / "pendente_atualizacao.json",
+                "OUTPUT_DIR": root / "output",
+                "RUNS_DIR": root / "output" / "runs",
+                "UPLOAD_DIR": root / "uploads",
+                "AUDIT_DIR": root / "audits",
+                "BACKUP_DIR": root / "backups",
+                "LOG_DIR": root / "logs",
+                "BASE_UPDATE_LOCK_PATH": root / "output" / "base_update.lock",
+                "BACKUP_BEFORE_UPDATE": True,
+            }
+            config["BASE_FILE_PATH"].parent.mkdir(parents=True)
+            config["OUTPUT_DIR"].mkdir()
+            config["RUNS_DIR"].mkdir(parents=True)
+            config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
+            run_id = "run_teste"
+            run_paths = get_run_file_paths(config, run_id)
+            run_paths["run_dir"].mkdir(parents=True)
+            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["a.com"]}', encoding="utf-8")
+
+            first = confirm_pending_update(config, run_id=run_id, approved_domains=["a.com", "b.com"], rejected_domains=[])
+            second = confirm_pending_update(config, run_id=run_id)
+
+        self.assertEqual(first["updated_base_file"], second["updated_base_file"])
 
     def test_process_files_compares_against_authoritative_base_entries(self):
         with tempfile.TemporaryDirectory() as tmp:

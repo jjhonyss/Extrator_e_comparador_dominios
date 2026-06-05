@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -17,11 +18,15 @@ from processing import (
     get_run_upload_dir,
     latest_updated_base_path,
     process_files,
+    run_updated_base_path,
 )
 
 
-app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = CONFIG["MAX_FILE_SIZE"]
+_runtime_initialized = False
+
+
+class RuntimeConfigError(RuntimeError):
+    pass
 
 
 def configure_logging() -> None:
@@ -37,7 +42,7 @@ def configure_logging() -> None:
 
 def init_database() -> None:
     db_path = Path(CONFIG["AUDIT_DIR"]) / "auditoria.db"
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS processing_runs (
@@ -68,11 +73,31 @@ def init_database() -> None:
             )
             """
         )
+        conn.commit()
+
+
+def validate_runtime_settings() -> None:
+    if CONFIG["PORT"] < 1 or CONFIG["PORT"] > 65535:
+        raise RuntimeConfigError("Configuracao invalida: DOMAIN_GUARD_PORT deve estar entre 1 e 65535")
+    if CONFIG["MAX_FILE_SIZE"] <= 0:
+        raise RuntimeConfigError("Configuracao invalida: DOMAIN_GUARD_MAX_FILE_SIZE deve ser maior que zero")
+    if not CONFIG["ALLOWED_EXTENSIONS"]:
+        raise RuntimeConfigError("Configuracao invalida: DOMAIN_GUARD_ALLOWED_EXTENSIONS nao pode ficar vazio")
+
+
+def initialize_runtime() -> None:
+    global _runtime_initialized
+    if _runtime_initialized:
+        return
+    validate_runtime_settings()
+    configure_logging()
+    init_database()
+    _runtime_initialized = True
 
 
 def save_audit(summary: dict) -> None:
     db_path = Path(CONFIG["AUDIT_DIR"]) / "auditoria.db"
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         conn.execute(
             """
             INSERT INTO processing_runs (
@@ -93,10 +118,21 @@ def save_audit(summary: dict) -> None:
                 summary["elapsed_seconds"],
             ),
         )
+        conn.commit()
 
 
 def allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in CONFIG["ALLOWED_EXTENSIONS"]
+
+
+def create_app() -> Flask:
+    initialize_runtime()
+    flask_app = Flask(__name__)
+    flask_app.config["MAX_CONTENT_LENGTH"] = CONFIG["MAX_FILE_SIZE"]
+    return flask_app
+
+
+app = create_app()
 
 
 @app.route("/")
@@ -126,7 +162,12 @@ def process_uploads():
 
         filename = secure_filename(uploaded.filename)
         target = upload_dir / f"{timestamp}_{filename}"
-        uploaded.save(target)
+        try:
+            uploaded.save(target)
+        except OSError as exc:
+            errors.append(f"Falha ao salvar {uploaded.filename}: {exc}")
+            logging.exception("Falha ao salvar upload: %s", uploaded.filename)
+            continue
         saved_paths.append(target)
         logging.info("Arquivo recebido: %s", target.name)
 
@@ -138,6 +179,12 @@ def process_uploads():
         summary["errors"] = errors + summary["errors"]
         save_audit(summary)
         return jsonify(summary)
+    except sqlite3.Error as exc:
+        logging.exception("Falha no banco de auditoria")
+        return jsonify({"error": f"Falha ao registrar auditoria da execucao: {exc}"}), 500
+    except OSError as exc:
+        logging.exception("Falha de arquivo durante o processamento")
+        return jsonify({"error": f"Falha de acesso a arquivo ou diretorio operacional: {exc}"}), 500
     except Exception as exc:
         logging.exception("Falha inesperada no processamento")
         return jsonify({"error": f"Falha inesperada no processamento: {exc}"}), 500
@@ -152,7 +199,10 @@ def download_file(name: str):
         "whitelist": run_paths.get("whitelist", CONFIG["WHITELIST_PATH"]),
         "relatorio": run_paths.get("report", CONFIG["REPORT_PATH"]),
     }
-    path = latest_updated_base_path(CONFIG) if name == "base_atualizada" else allowed_downloads.get(name)
+    if name == "base_atualizada":
+        path = run_updated_base_path(CONFIG, run_id) if run_id else latest_updated_base_path(CONFIG)
+    else:
+        path = allowed_downloads.get(name)
     if not path or not Path(path).exists():
         return jsonify({"error": "Arquivo nao encontrado"}), 404
     return send_file(path, as_attachment=True)
@@ -171,6 +221,15 @@ def confirm_update():
         )
         logging.info("Atualizacao de base confirmada: %s", summary)
         return jsonify(summary)
+    except TimeoutError as exc:
+        logging.warning("Atualizacao de base bloqueada: %s", exc)
+        return jsonify({"error": str(exc)}), 409
+    except sqlite3.Error as exc:
+        logging.exception("Falha no banco ao confirmar atualizacao")
+        return jsonify({"error": f"Falha ao registrar auditoria de rejeicoes: {exc}"}), 500
+    except OSError as exc:
+        logging.exception("Falha de arquivo ao confirmar atualizacao")
+        return jsonify({"error": f"Falha de acesso a arquivo ou diretorio operacional: {exc}"}), 500
     except Exception as exc:
         logging.exception("Falha ao confirmar atualizacao da base")
         return jsonify({"error": f"Falha ao confirmar atualizacao da base: {exc}"}), 500
@@ -199,9 +258,5 @@ def file_too_large(_error):
     return jsonify({"error": f"Arquivo excede o limite de {limit}MB"}), 413
 
 
-configure_logging()
-init_database()
-
-
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host=CONFIG["HOST"], port=CONFIG["PORT"], debug=False)

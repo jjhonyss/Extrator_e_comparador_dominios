@@ -5,7 +5,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-from .extraction import ensure_directories, load_base_entries, load_domain_file, normalize_domain
+from .extraction import ensure_directories, load_base_entries, load_domain_file, normalize_block_target
 from .models import FileExtraction
 from .runtime import acquire_update_lock, get_run_file_paths, read_run_manifest, write_run_manifest
 
@@ -16,8 +16,9 @@ def write_output_files(blocklist: list[str], whitelist: list[dict], report: str,
     paths["run_dir"].mkdir(parents=True, exist_ok=True)
 
     output_lines = [
-        f"# Dominios para Bloqueio - Gerado em {generated_at}",
-        f"# Total: {len(blocklist)} dominios",
+        f"# Alvos para Bloqueio - Gerado em {generated_at}",
+        f"# Total: {len(blocklist)} alvos",
+        f"# Observacao: a lista pode conter dominios completos e URLs especificas",
         "",
         *blocklist,
         "",
@@ -79,13 +80,13 @@ def load_pending_update(config: dict, run_id: str | None = None) -> list[str]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return []
-    return sorted({domain for domain in payload.get("domains", []) if normalize_domain(domain)})
+    return sorted({target for domain in payload.get("domains", []) if (target := normalize_block_target(domain))})
 
 
 def normalize_domain_list(domains: list[str] | None) -> list[str]:
     if not domains:
         return []
-    return sorted({normalized for domain in domains if (normalized := normalize_domain(str(domain)))})
+    return sorted({normalized for domain in domains if (normalized := normalize_block_target(str(domain)))})
 
 
 def rejected_file_path(config: dict) -> Path:
@@ -155,7 +156,7 @@ def build_report(
     errors = [f"{item.filename}: {error}" for item in file_results for error in item.errors]
 
     lines = [
-        "RELATORIO DE PROCESSAMENTO DE DOMINIOS",
+        "RELATORIO DE PROCESSAMENTO DE DOMINIOS E ALVOS",
         f"Gerado em: {generated_at}",
         f"Tempo de processamento: {elapsed_seconds:.2f}s",
         "",
@@ -178,6 +179,7 @@ def build_report(
             f"Total de dominios para bloqueio: {len(blocklist)}",
             f"Total descartado por ja existir na base: {len(existing_discarded)}",
             f"Duplicatas removidas durante extracao: {duplicate_total}",
+            "Obs: a lista de bloqueio pode conter dominios completos e URLs especificas.",
             "",
             "DOMINIOS ENVIADOS PARA WHITELIST",
         ]
@@ -264,7 +266,7 @@ def confirm_pending_update(
         domains_to_add = sorted(set(selected) - current)
 
         if not domains_to_add:
-            latest = latest_updated_base_path(config)
+            latest = run_updated_base_path(config, run_id) if run_id else latest_updated_base_path(config)
             return {
                 "run_id": run_id,
                 "added_count": 0,
@@ -299,6 +301,20 @@ def confirm_pending_update(
             "updated_base_file": updated_base_path.name,
             "base_total": len(updated),
         }
+
+
+def run_updated_base_path(config: dict, run_id: str | None) -> Path | None:
+    if not run_id:
+        return None
+
+    manifest = read_run_manifest(config, run_id) or {}
+    base_update = manifest.get("base_update") or {}
+    filename = base_update.get("updated_base_file")
+    if not filename:
+        return None
+
+    path = Path(config["OUTPUT_DIR"]) / filename
+    return path if path.exists() else None
 
 
 def latest_updated_base_path(config: dict) -> Path | None:

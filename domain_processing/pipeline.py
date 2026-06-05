@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .classification import classify_for_base_update
-from .extraction import ensure_directories, extract_file, load_base_reference_domains
+from .extraction import ensure_directories, extract_file, load_base_reference_state
 from .outputs import build_report, save_pending_update, write_output_files
 from .runtime import write_run_manifest
 
@@ -19,14 +19,14 @@ def process_files(paths: list[Path], config: dict, run_id: str) -> dict:
         file_results = list(executor.map(lambda path: extract_file(path, config), paths))
 
     extracted = set().union(*(item.domains for item in file_results)) if file_results else set()
-    existing, existing_count = load_base_reference_domains(Path(config["BASE_FILE_PATH"]))
-    blocklist, whitelist, existing_discarded = classify_for_base_update(extracted, existing)
+    existing_exact, existing_domains, existing_count = load_base_reference_state(Path(config["BASE_FILE_PATH"]))
+    blocklist, whitelist, existing_discarded = classify_for_base_update(extracted, existing_exact, existing_domains)
     new_domains = set(blocklist)
     elapsed = time.perf_counter() - start
     report = build_report(
         file_results,
         extracted,
-        existing,
+        existing_domains,
         new_domains,
         blocklist,
         whitelist,

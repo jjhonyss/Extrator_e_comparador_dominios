@@ -116,6 +116,85 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+Guia recomendado para primeira subida em VM/VPS:
+
+1. `INSTALL_VM.md`
+
+## Configuracao por Ambiente
+
+O projeto continua funcionando com os defaults atuais, mas agora pode ser configurado por variaveis de ambiente com prefixo `DOMAIN_GUARD_`.
+
+Variaveis principais:
+
+1. `DOMAIN_GUARD_HOST`
+2. `DOMAIN_GUARD_PORT`
+3. `DOMAIN_GUARD_DATA_DIR`
+4. `DOMAIN_GUARD_UPLOAD_DIR`
+5. `DOMAIN_GUARD_OUTPUT_DIR`
+6. `DOMAIN_GUARD_AUDIT_DIR`
+7. `DOMAIN_GUARD_LOG_DIR`
+8. `DOMAIN_GUARD_BACKUP_DIR`
+9. `DOMAIN_GUARD_BASE_FILE_PATH`
+10. `DOMAIN_GUARD_REJECTED_FILE_PATH`
+11. `DOMAIN_GUARD_MAX_FILE_SIZE`
+12. `DOMAIN_GUARD_ENABLE_OCR`
+13. `DOMAIN_GUARD_OCR_ONLY_IF_NO_DOMAINS`
+14. `DOMAIN_GUARD_OCR_LANGUAGE`
+15. `DOMAIN_GUARD_RETENTION_RUN_DAYS`
+16. `DOMAIN_GUARD_RETENTION_UPLOAD_DAYS`
+17. `DOMAIN_GUARD_RETENTION_BACKUP_DAYS`
+18. `DOMAIN_GUARD_RETENTION_UPDATED_BASE_DAYS`
+
+Exemplo PowerShell:
+
+```powershell
+$env:DOMAIN_GUARD_HOST = "0.0.0.0"
+$env:DOMAIN_GUARD_PORT = "5000"
+$env:DOMAIN_GUARD_DATA_DIR = "C:\DomainGuard\data"
+python app.py
+```
+
+## Diretorios Operacionais
+
+Para uso em VM/VPS, o ideal e tratar `DOMAIN_GUARD_DATA_DIR` como raiz persistente dos dados operacionais.
+
+Estrutura padrao:
+
+```text
+<data_dir>/
+├── audits/
+├── backups/
+├── base/
+├── logs/
+├── output/
+│   └── runs/
+└── uploads/
+```
+
+O que precisa persistir entre reinicios:
+
+1. `base/`
+2. `audits/`
+3. `backups/`
+4. `logs/`
+5. `output/`
+6. `uploads/`
+
+Recomendacao pratica para servidor:
+
+1. codigo da aplicacao em uma pasta de deploy
+2. dados operacionais em outra pasta persistente, por exemplo `/opt/domain-guard/data` no Linux
+3. configurar `DOMAIN_GUARD_DATA_DIR` apontando para essa pasta
+
+Exemplo conceitual:
+
+```text
+/opt/domain-guard/app
+/opt/domain-guard/data
+```
+
+Ao iniciar, a aplicacao agora garante a criacao dos diretorios pais necessarios para base, logs, auditoria, backups, saidas e arquivos por execucao.
+
 ## Uso
 
 1. Coloque a base atual em `base/base_atual.txt`.
@@ -125,13 +204,98 @@ pip install -r requirements.txt
 python app.py
 ```
 
-3. Acesse `http://127.0.0.1:5000`.
+3. Acesse `http://127.0.0.1:5000` ou o host/porta configurados por ambiente.
 4. Envie um ou mais arquivos `.txt` ou `.pdf`.
 5. Revise o resultado da execucao.
 6. Baixe os artefatos gerados.
 7. Se estiver correto, confirme a atualizacao da base pela interface.
 
 Observacao: abrir `templates/index.html` diretamente no navegador nao executa a aplicacao. O processamento depende do servidor Flask local.
+
+## Execucao Em Servidor
+
+Para ambiente de servidor, a recomendacao agora e usar um servidor WSGI em vez de depender de `python app.py`.
+
+Instale as dependencias:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Subida recomendada com `waitress`:
+
+```powershell
+python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
+```
+
+Ou usando as variaveis de ambiente ja suportadas:
+
+```powershell
+$env:DOMAIN_GUARD_HOST = "0.0.0.0"
+$env:DOMAIN_GUARD_PORT = "5000"
+python -m waitress --host=$env:DOMAIN_GUARD_HOST --port=$env:DOMAIN_GUARD_PORT wsgi:app
+```
+
+Arquivos de entrada para servidor:
+
+1. `app.py`: aplicacao Flask
+2. `wsgi.py`: ponto de entrada para servidor WSGI
+
+`python app.py` continua util para desenvolvimento local e validacao rapida.
+
+## Checklist Rapido Antes Da VM
+
+1. Validar a suite de testes com `python -m unittest discover -s tests`
+2. Confirmar que o fluxo local continua funcional com `TXT` e `PDF`
+3. Definir o `DOMAIN_GUARD_DATA_DIR` persistente no servidor
+4. Separar pasta de codigo e pasta de dados operacionais
+5. Garantir acesso de escrita em `base/`, `output/`, `uploads/`, `audits/`, `logs/` e `backups/`
+6. Definir host e porta de subida
+7. Subir a aplicacao com `waitress`
+8. Validar acesso HTTP pela rede esperada
+9. Testar processamento, download e confirmacao da base no ambiente alvo
+
+## Retencao E Limpeza
+
+Politica inicial recomendada:
+
+1. `output/runs/`: manter `30` dias
+2. `uploads/`: manter `14` dias
+3. `backups/`: manter `90` dias
+4. `output/base_atualizada_*.txt`: manter `30` dias
+
+Esses valores podem ser ajustados por ambiente com:
+
+1. `DOMAIN_GUARD_RETENTION_RUN_DAYS`
+2. `DOMAIN_GUARD_RETENTION_UPLOAD_DAYS`
+3. `DOMAIN_GUARD_RETENTION_BACKUP_DAYS`
+4. `DOMAIN_GUARD_RETENTION_UPDATED_BASE_DAYS`
+
+Limpeza manual:
+
+```powershell
+.\.venv\Scripts\python.exe cleanup.py
+```
+
+Para ambiente Linux:
+
+```bash
+.venv/bin/python cleanup.py
+```
+
+O script remove apenas:
+
+1. diretorios antigos em `output/runs/`
+2. diretorios antigos em `uploads/`
+3. backups antigos em `backups/`
+4. arquivos antigos `base_atualizada_*.txt`
+
+Ele nao remove:
+
+1. `base/base_atual.txt`
+2. `base/base_rejeitados.txt`
+3. `audits/auditoria.db`
+4. `logs/app.log`
 
 ## Artefatos Gerados
 
@@ -167,6 +331,8 @@ Arquivos principais:
 5. `GET /whitelist`
 
 `/confirm-update`, `/download/<name>` e `/whitelist` podem trabalhar com `run_id` para acessar artefatos especificos de uma execucao.
+
+Para operacao em servidor, o fluxo recomendado e sempre usar os artefatos vinculados ao `run_id` da execucao atual. Os arquivos globais em `output/` permanecem apenas como fallback operacional e compatibilidade.
 
 ## OCR
 

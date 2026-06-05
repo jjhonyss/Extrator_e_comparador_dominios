@@ -524,6 +524,45 @@ body {
   word-break: break-word;
 }
 
+.warnings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.warnings-details {
+  margin-top: 8px;
+}
+
+.warnings-details summary {
+  cursor: pointer;
+  color: inherit;
+}
+
+.warnings-details ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.warnings-details li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.review-domain-type {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 /* File List Queue */
 .queue-panel {
   display: flex;

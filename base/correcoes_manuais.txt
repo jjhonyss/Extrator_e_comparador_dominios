@@ -1,0 +1,2 @@
+# origem => destino
+0705x.bet => 05x.bet

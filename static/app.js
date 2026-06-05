@@ -39,11 +39,56 @@ function setStatus(message, type = "info") {
   statusText.dataset.type = type;
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderWarnings(errors) {
+  if (!warningsList) return;
+  if (!errors || !errors.length) {
+    warningsList.style.display = "none";
+    warningsList.innerHTML = "";
+    return;
+  }
+
+  const grouped = new Map();
+  errors.forEach((error) => {
+    grouped.set(error, (grouped.get(error) || 0) + 1);
+  });
+
+  const items = Array.from(grouped.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([message, count]) => `
+      <li>
+        <span>${escapeHtml(message)}</span>
+        ${count > 1 ? `<strong>${count}x</strong>` : ""}
+      </li>
+    `)
+    .join("");
+
+  warningsList.style.display = "block";
+  warningsList.innerHTML = `
+    <div class="warnings-header">
+      <strong>Avisos do processamento</strong>
+      <span>${errors.length} aviso(s)</span>
+    </div>
+    <details class="warnings-details">
+      <summary>Ver detalhes</summary>
+      <ul>${items}</ul>
+    </details>
+  `;
+}
+
 function updateDownloadLinks() {
   const query = currentRunId ? `?run_id=${encodeURIComponent(currentRunId)}` : "";
   downloadBlocklist.href = `/download/novos_dominios${query}`;
   downloadReport.href = `/download/relatorio${query}`;
-  downloadBase.href = "/download/base_atualizada";
+  downloadBase.href = `/download/base_atualizada${query}`;
 }
 
 function setActiveTab(targetId) {
@@ -149,6 +194,8 @@ function renderBlocklistPage() {
   const pageItems = blocklistItems.slice(start, start + pageSize);
   const approvedCount = blocklistItems.filter((domain) => approvedDomains.has(domain)).length;
   const rejectedCount = total - approvedCount;
+  const specificTargetCount = blocklistItems.filter((item) => item.includes("/") || item.includes("?")).length;
+  const domainCount = total - specificTargetCount;
 
   blocklistPreview.innerHTML = "";
 
@@ -179,15 +226,20 @@ function renderBlocklistPage() {
       const text = document.createElement("span");
       text.textContent = domain;
 
+      const type = document.createElement("span");
+      type.className = "review-domain-type";
+      type.textContent = domain.includes("/") || domain.includes("?") ? "URL especifica" : "Dominio";
+
       label.appendChild(checkbox);
       label.appendChild(text);
+      label.appendChild(type);
       blocklistPreview.appendChild(label);
     });
   }
 
   blocklistMeta.textContent = total
-    ? `${approvedCount} aprovados; ${rejectedCount} rejeitados; ${total} no total`
-    : "0 dominios novos";
+    ? `${approvedCount} aprovados; ${rejectedCount} rejeitados; ${domainCount} dominios; ${specificTargetCount} URLs especificas`
+    : "0 alvos novos";
   blocklistPrev.disabled = blocklistPage === 0 || total === 0;
   blocklistNext.disabled = blocklistPage >= pages - 1 || total === 0;
 }
@@ -303,15 +355,7 @@ processButton.addEventListener("click", () => {
     downloadReport.classList.remove("disabled");
     confirmUpdateButton.disabled = !response.pending_update_available;
 
-    if (warningsList) {
-      if (response.errors && response.errors.length > 0) {
-        warningsList.style.display = "block";
-        warningsList.innerHTML = `<strong>Avisos do processamento:</strong><br>${response.errors.map(err => `⚠️ ${err}`).join('<br>')}`;
-      } else {
-        warningsList.style.display = "none";
-        warningsList.innerHTML = "";
-      }
-    }
+    renderWarnings(response.errors || []);
 
     setStatus(`Extração concluída em ${response.elapsed_seconds}s. Descartados: ${response.existing_discarded_count}. Revise e confirme para atualizar a base.`, "success");
   });

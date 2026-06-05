@@ -2,6 +2,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+from config import CONFIG
+
 from .models import FileExtraction
 
 
@@ -84,12 +86,49 @@ KNOWN_SINGLE_LABEL_SUFFIXES = {
 def ensure_directories(config: dict) -> None:
     for key in ("UPLOAD_DIR", "OUTPUT_DIR", "RUNS_DIR", "AUDIT_DIR", "BACKUP_DIR", "LOG_DIR"):
         Path(config[key]).mkdir(parents=True, exist_ok=True)
-    Path(config["BASE_FILE_PATH"]).parent.mkdir(parents=True, exist_ok=True)
+    for key in (
+        "BASE_FILE_PATH",
+        "TARGET_CORRECTIONS_PATH",
+        "REJECTED_FILE_PATH",
+        "WHITELIST_PATH",
+        "OUTPUT_PATH",
+        "REPORT_PATH",
+        "PENDING_UPDATE_PATH",
+        "BASE_UPDATE_LOCK_PATH",
+    ):
+        value = config.get(key)
+        if value:
+            Path(value).parent.mkdir(parents=True, exist_ok=True)
+
     Path(config["BASE_FILE_PATH"]).touch(exist_ok=True)
     rejected_path = config.get("REJECTED_FILE_PATH")
     if rejected_path:
-        Path(rejected_path).parent.mkdir(parents=True, exist_ok=True)
         Path(rejected_path).touch(exist_ok=True)
+
+
+def load_target_corrections(config: dict | None = None) -> dict[str, str]:
+    active_config = CONFIG if config is None else config
+    configured_path = active_config.get("TARGET_CORRECTIONS_PATH", CONFIG["TARGET_CORRECTIONS_PATH"])
+    path = Path(configured_path)
+    if not path.exists():
+        return {}
+
+    corrections: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        clean = line.strip()
+        if not clean or clean.startswith("#") or "=>" not in clean:
+            continue
+        source, target = (part.strip() for part in clean.split("=>", 1))
+        normalized_source = normalize_block_target(source)
+        normalized_target = normalize_block_target(target)
+        if normalized_source and normalized_target:
+            corrections[normalized_source] = normalized_target
+    return corrections
+
+
+def apply_target_corrections(targets: Iterable[str], config: dict | None = None) -> set[str]:
+    corrections = load_target_corrections(config)
+    return {corrections.get(target, target) for target in targets}
 
 
 def normalize_domain(value: str) -> str | None:
@@ -121,6 +160,35 @@ def normalize_domain(value: str) -> str | None:
         return None
 
     return candidate
+
+
+def normalize_block_target(value: str) -> str | None:
+    candidate = value.strip()
+    candidate = re.sub(r"^[a-z][a-z0-9+.-]*://", "", candidate, flags=re.IGNORECASE)
+    candidate = candidate.split("#", 1)[0]
+    candidate = candidate.split("@")[-1]
+    candidate = candidate.strip(" \t\r\n'\"`()[]{}<>.,;:|\\")
+
+    suffix_start = min((index for index in (candidate.find("/"), candidate.find("?")) if index >= 0), default=-1)
+    host_part = candidate if suffix_start < 0 else candidate[:suffix_start]
+    suffix = "" if suffix_start < 0 else candidate[suffix_start:]
+
+    normalized_host = normalize_domain(host_part)
+    if not normalized_host:
+        return None
+
+    suffix = suffix.rstrip(" \t\r\n'\"`()[]{}<>.,;:|\\")
+    if suffix in {"", "/"}:
+        return normalized_host
+    return f"{normalized_host}{suffix}"
+
+
+def is_specific_block_target(value: str) -> bool:
+    return "/" in value or "?" in value
+
+
+def block_target_domain(value: str) -> str | None:
+    return normalize_domain(value)
 
 
 def merge_wrapped_domain_lines(lines: Iterable[str]) -> list[str]:
@@ -264,7 +332,7 @@ def extract_domains_from_pdf_text(text: str) -> tuple[set[str], int]:
 
 def extract_domains_from_lines(lines: Iterable[str]) -> tuple[set[str], int, int]:
     normalized: list[str] = []
-    safe_line = re.compile(r"^[a-zA-Z0-9*._:/?#@%+\-]+$")
+    safe_line = re.compile(r"^[a-zA-Z0-9*._:/?#@%+\-=;&]+$")
 
     for line in lines:
         value = line.strip()
@@ -272,21 +340,22 @@ def extract_domains_from_lines(lines: Iterable[str]) -> tuple[set[str], int, int
             continue
         if not value or not safe_line.fullmatch(value):
             continue
-        domain = normalize_domain(value)
-        if domain:
-            normalized.append(domain)
+        target = normalize_block_target(value)
+        if target:
+            normalized.append(target)
 
     unique = set(normalized)
     return unique, max(0, len(normalized) - len(unique)), len(normalized)
 
 
-def extract_txt(path: Path) -> FileExtraction:
+def extract_txt(path: Path, config: dict | None = None) -> FileExtraction:
     result = FileExtraction(filename=path.name, methods=["txt"])
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
         lines = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
         ignored_lines = sum(1 for line in lines if has_invalid_domain_separator(line))
         result.domains, result.duplicate_count, _valid_count = extract_domains_from_lines(lines)
+        result.domains = apply_target_corrections(result.domains, config)
         result.raw_count = len(lines)
         if ignored_lines:
             result.errors.append(f"Linhas ignoradas por separador invalido: {ignored_lines}")
@@ -300,6 +369,7 @@ def extract_pdf(
     enable_ocr: bool,
     ocr_language: str,
     ocr_only_if_no_domains: bool = True,
+    config: dict | None = None,
 ) -> FileExtraction:
     result = FileExtraction(filename=path.name)
     text_parts: list[str] = []
@@ -314,6 +384,7 @@ def extract_pdf(
 
         lines = merge_wrapped_domain_lines(lines)
         result.domains, result.duplicate_count, result.raw_count = extract_domains_from_lines(lines)
+        result.domains = apply_target_corrections(result.domains, config)
         if result.domains:
             result.methods.append("pymupdf-lines")
             if enable_ocr and ocr_only_if_no_domains:
@@ -364,6 +435,7 @@ def extract_pdf(
         result.errors.append("OCR ignorado: dominios encontrados na extracao estruturada")
 
     result.domains, result.duplicate_count = extract_domains_from_pdf_text("\n".join(text_parts))
+    result.domains = apply_target_corrections(result.domains, config)
     result.raw_count = len(result.domains) + result.duplicate_count
     if structured_domains and not should_run_ocr:
         result.duplicate_count = structured_duplicates
@@ -397,13 +469,14 @@ def extract_pdf_ocr(path: Path, ocr_language: str) -> tuple[str, list[str]]:
 def extract_file(path: Path, config: dict) -> FileExtraction:
     suffix = path.suffix.lower()
     if suffix == ".txt":
-        return extract_txt(path)
+        return extract_txt(path, config)
     if suffix == ".pdf":
         return extract_pdf(
             path,
             config["ENABLE_OCR"],
             config["OCR_LANGUAGE"],
             config.get("OCR_ONLY_IF_NO_DOMAINS", True),
+            config,
         )
     return FileExtraction(filename=path.name, errors=["Tipo de arquivo nao permitido"])
 
@@ -416,10 +489,10 @@ def load_domain_file(path: Path) -> set[str]:
         clean = line.strip()
         if not clean or clean.startswith("#"):
             continue
-        domain = normalize_base_domain(clean)
-        if domain:
-            domains.add(domain)
-    return domains
+        target = normalize_block_target(clean)
+        if target:
+            domains.add(target)
+    return apply_target_corrections(domains)
 
 
 def load_base_reference_domains(path: Path) -> tuple[set[str], int]:
@@ -443,6 +516,38 @@ def load_base_reference_domains(path: Path) -> tuple[set[str], int]:
         domains.update(extracted)
 
     return domains, entry_count
+
+
+def load_base_reference_state(path: Path) -> tuple[set[str], set[str], int]:
+    if not path.exists():
+        return set(), set(), 0
+
+    exact_targets: set[str] = set()
+    domain_targets: set[str] = set()
+    entry_count = 0
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        clean = line.strip()
+        if not clean or clean.startswith("#"):
+            continue
+
+        entry_count += 1
+        target = normalize_block_target(clean)
+        if target:
+            corrected = apply_target_corrections({target})
+            corrected_target = next(iter(corrected))
+            exact_targets.add(corrected_target)
+            if not is_specific_block_target(corrected_target):
+                domain_targets.add(corrected_target)
+            continue
+
+        normalized = normalize_domain(clean)
+        if normalized:
+            domain_targets.add(normalized)
+
+        extracted, _duplicates = extract_domains_from_text(clean)
+        domain_targets.update(extracted)
+
+    return exact_targets, domain_targets, entry_count
 
 
 def normalize_base_domain(value: str) -> str | None:

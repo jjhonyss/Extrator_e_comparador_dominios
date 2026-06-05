@@ -1,6 +1,8 @@
 import re
 from typing import Iterable
 
+from .extraction import block_target_domain, is_specific_block_target
+
 
 WHITELIST_PATTERNS = {
     "BANCOS": [
@@ -97,15 +99,16 @@ def wildcard_to_regex(pattern: str) -> re.Pattern[str]:
 
 
 def classify_sensitive(domain: str) -> tuple[bool, str | None, str | None]:
+    comparable = block_target_domain(domain) or domain
     for category, patterns in WHITELIST_PATTERNS.items():
         for pattern in patterns:
             normalized_pattern = pattern.lower()
             if "*" in normalized_pattern:
-                if wildcard_to_regex(normalized_pattern).search(domain):
+                if wildcard_to_regex(normalized_pattern).search(comparable):
                     return True, category, f"padrao wildcard: {pattern}"
                 continue
 
-            if domain == normalized_pattern or domain.endswith(f".{normalized_pattern}"):
+            if comparable == normalized_pattern or comparable.endswith(f".{normalized_pattern}"):
                 return True, category, f"padrao protegido: {pattern}"
 
     return False, None, None
@@ -127,9 +130,29 @@ def split_whitelist(domains: Iterable[str]) -> tuple[list[str], list[dict]]:
     return blocklist, whitelist
 
 
-def classify_for_base_update(extracted: Iterable[str], existing: Iterable[str]) -> tuple[list[str], list[dict], set[str]]:
+def classify_for_base_update(
+    extracted: Iterable[str],
+    existing: Iterable[str],
+    existing_domains: Iterable[str] | None = None,
+) -> tuple[list[str], list[dict], set[str]]:
     candidates, whitelist = split_whitelist(extracted)
-    existing_set = set(existing)
-    existing_discarded = set(candidates).intersection(existing_set)
-    blocklist = sorted(set(candidates) - existing_set)
+    existing_exact = set(existing)
+    comparable_domains = set(existing if existing_domains is None else existing_domains)
+    existing_discarded: set[str] = set()
+    blocklist: list[str] = []
+
+    for candidate in sorted(set(candidates)):
+        candidate_domain = block_target_domain(candidate) or candidate
+        if is_specific_block_target(candidate):
+            if candidate in existing_exact or candidate_domain in comparable_domains:
+                existing_discarded.add(candidate)
+            else:
+                blocklist.append(candidate)
+            continue
+
+        if candidate in comparable_domains or candidate in existing_exact:
+            existing_discarded.add(candidate)
+        else:
+            blocklist.append(candidate)
+
     return blocklist, whitelist, existing_discarded
