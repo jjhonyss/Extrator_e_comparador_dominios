@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 from typing import Iterable
 
 from .extraction import block_target_domain, is_specific_block_target
@@ -93,6 +94,7 @@ WHITELIST_PATTERNS = {
     ],
 }
 
+@lru_cache(maxsize=128)
 def wildcard_to_regex(pattern: str) -> re.Pattern[str]:
     escaped = re.escape(pattern.lower()).replace(r"\*", r"[a-z0-9-]*")
     return re.compile(rf"(^|\.){escaped}$")

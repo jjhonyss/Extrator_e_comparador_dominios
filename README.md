@@ -1,128 +1,320 @@
-# Plataforma Local de Processamento de Dominios
+# Domain Guard
 
-Aplicacao web local para extrair dominios de arquivos `TXT` e `PDF`, comparar com a base atual, separar o que ja existe, gerar novos dominios para bloqueio e proteger apenas dominios explicitamente previstos em whitelist.
+Aplicacao web em Python para extrair dominios e alvos especificos de arquivos `TXT` e `PDF`, comparar contra uma base local, separar o que deve ser protegido em whitelist e preparar os novos alvos para incremento manual na base operacional.
 
-## Objetivo
+Este README foi reorganizado para servir como documento de continuidade do projeto.
 
-O projeto foi desenhado para automatizar o fluxo abaixo:
+## Intuito Do Projeto
 
-1. Adicionar arquivos novos.
-2. Extrair dominios com tratamento de ruido real de `TXT` e `PDF`.
-3. Comparar com `base/base_atual.txt`.
-4. Gerar um `.txt` final com os novos dominios para incremento no servidor.
-5. Atualizar a base local somente apos confirmacao manual.
+O sistema existe para reduzir trabalho manual em um fluxo operacional de analise de dominios.
 
-## Recursos
+Fluxo principal:
 
-1. Upload multiplo de arquivos `.txt` e `.pdf`.
-2. Processamento por execucao com `run_id` proprio.
-3. Extracao paralela por arquivo.
-4. Extracao de `PDF` com `PyMuPDF`, fallback com `pdfplumber` e OCR opcional.
-5. Parser de `TXT` mais estrito e parser de `PDF` mais tolerante a ruido visual.
-6. Comparacao contra a base atual para descartar dominios ja existentes.
-7. Whitelist estrita para dominios oficiais e padroes explicitamente protegidos.
-8. Geracao de artefatos por execucao em `output/runs/<run_id>/`.
-9. Auditoria em log local e SQLite em `audits/auditoria.db`.
-10. Confirmacao manual para atualizar `base/base_atual.txt` com lock de seguranca.
+1. receber um ou mais arquivos de entrada
+2. extrair dominios e URLs especificas mesmo quando o material vier com ruido de OCR ou quebra de layout
+3. comparar os resultados com a base atual de referencias ja conhecidas
+4. separar o que ja existe, o que deve ir para whitelist e o que deve virar novo alvo de bloqueio
+5. permitir revisao manual antes de atualizar a base
+6. gerar auditoria, artefatos e backup da base antes da confirmacao
 
-## Comportamento Atual do Motor
+O projeto nao foi pensado como produto publico. O uso esperado e interno e controlado.
 
-### Regras de classificacao
+## Estado Atual
 
-1. Apenas dominios e padroes explicitamente definidos em whitelist sao protegidos.
-2. Palavras como `bank`, `banco`, `faculdade` e similares nao colocam mais dominio em whitelist por si so.
-3. Todo dominio novo que nao bater em regra legitima de whitelist vai para bloqueio.
+No momento, o projeto esta em um ponto bom para:
 
-### Diferenca entre `TXT` e `PDF`
+1. execucao local
+2. subida em VM para uso individual controlado
+3. testes manuais do fluxo completo
 
-1. `TXT`:
-   - parser mais estrito
-   - linhas com separadores invalidos como `|` sao ignoradas
+Ainda nao esta maduro para uso compartilhado sem camadas adicionais de:
 
-2. `PDF`:
-   - parser mais tolerante
-   - tenta recompor dominios quebrados por layout
-   - evita colar dois dominios validos completos
-   - trata melhor fragmentacoes como:
-     - `softoni` + `c.com.br`
-     - `catalog.k` + `yte.site`
-     - `storage-usa-sv07-` + `user....workers.dev`
+1. login
+2. perfis de acesso
+3. auditoria por usuario
+4. rotina operacional formal
 
-### Comparacao com a base
+## Stack Tecnica
 
-1. O motor compara contra `base/base_atual.txt`.
-2. A leitura da base esta mais estrita para nao deixar entradas malformadas contaminarem a comparacao.
-3. O projeto hoje preserva `www.` como parte do dominio, ou seja, `www.site.com` e `site.com` sao tratados como entradas diferentes.
+Backend:
 
-## Estrutura
+1. Python 3.11
+2. Flask
+3. Waitress para subida WSGI
+
+Extracao:
+
+1. PyMuPDF
+2. pdfplumber
+3. pytesseract
+4. Pillow
+
+Persistencia e rastreabilidade:
+
+1. arquivos em disco
+2. SQLite para historico e dominios rejeitados
+
+Frontend:
+
+1. HTML
+2. CSS
+3. JavaScript vanilla
+
+## Estrutura Do Projeto
 
 ```text
 Extrator_e_comparador_dominios/
 ├── app.py
+├── wsgi.py
 ├── config.py
 ├── processing.py
-├── README.md
-├── ARCHITECTURE.md
+├── cleanup.py
 ├── requirements.txt
 ├── setup.ps1
 ├── iniciar_plataforma.ps1
 ├── iniciar_plataforma.bat
+├── README.md
+├── ARCHITECTURE.md
+├── INSTALL_VM.md
+├── GUIA_EVOLUCAO_VM_E_LIBERACAO.txt
 ├── domain_processing/
 │   ├── __init__.py
+│   ├── audit.py
 │   ├── classification.py
 │   ├── extraction.py
 │   ├── models.py
 │   ├── outputs.py
 │   ├── pipeline.py
 │   └── runtime.py
-├── audits/
-├── backups/
-├── base/
-│   └── base_atual.txt
-├── fixtures/
-├── logs/
-├── output/
-│   └── runs/
+├── templates/
+│   └── index.html
 ├── static/
 │   ├── app.js
 │   └── styles.css
-├── templates/
-│   └── index.html
 ├── tests/
-│   └── test_processing.py
-└── uploads/
+│   ├── test_app_audit_history.py
+│   ├── test_app_factory.py
+│   ├── test_app_routes.py
+│   ├── test_cleanup.py
+│   ├── test_config.py
+│   ├── test_directories.py
+│   ├── test_processing.py
+│   └── test_runtime_validation.py
+├── base/
+│   ├── base_atual.txt
+│   ├── base_rejeitados.txt
+│   └── correcoes_manuais.txt
+├── fixtures/
+├── uploads/
+├── output/
+├── logs/
+├── audits/
+└── backups/
 ```
 
-## Instalacao
+## O Papel De Cada Arquivo Principal
 
-Requisitos:
+### `app.py`
 
-1. Python 3.11 recomendado.
-2. `Tesseract OCR` instalado se quiser OCR em PDFs escaneados.
-3. `Poppler` nao e obrigatorio.
+Camada HTTP.
 
-Instalacao automatica:
+Responsabilidades:
 
-```powershell
-.\setup.ps1
-```
+1. criar a aplicacao Flask
+2. validar configuracao de runtime
+3. inicializar logging e banco SQLite
+4. receber uploads
+5. chamar o pipeline de processamento
+6. confirmar atualizacao da base
+7. expor downloads e historico de auditoria
 
-Instalacao manual:
+Rotas principais:
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
+1. `/`
+2. `/process`
+3. `/download/<name>`
+4. `/confirm-update`
+5. `/whitelist`
+6. `/audit-history`
 
-Guia recomendado para primeira subida em VM/VPS:
+### `wsgi.py`
 
-1. `INSTALL_VM.md`
+Ponto de entrada simples para subir com `waitress`.
 
-## Configuracao por Ambiente
+### `config.py`
 
-O projeto continua funcionando com os defaults atuais, mas agora pode ser configurado por variaveis de ambiente com prefixo `DOMAIN_GUARD_`.
+Centraliza a configuracao por variaveis de ambiente com prefixo `DOMAIN_GUARD_`.
+
+Tambem define os caminhos operacionais e politicas de retencao.
+
+### `processing.py`
+
+Arquivo de compatibilidade que reexporta funcoes do pacote `domain_processing`.
+
+### `cleanup.py`
+
+Responsavel pela limpeza manual de artefatos antigos como:
+
+1. `output/runs/`
+2. `uploads/`
+3. `backups/`
+4. arquivos `base_atualizada_*.txt`
+
+## Pacote `domain_processing`
+
+### `extraction.py`
+
+Responsavel por:
+
+1. normalizacao de dominios
+2. leitura de `TXT`
+3. leitura de `PDF`
+4. heuristicas para reconstruir dominios quebrados por layout
+5. OCR opcional
+6. carregamento da base atual
+7. aplicacao de correcoes manuais
+
+### `classification.py`
+
+Responsavel por:
+
+1. regras de whitelist
+2. separacao entre whitelist e blocklist
+3. descarte de entradas que ja existem na base
+
+### `pipeline.py`
+
+Orquestra o fluxo principal.
+
+Passos:
+
+1. extracao paralela por arquivo
+2. consolidacao dos resultados
+3. comparacao com a base
+4. classificacao
+5. geracao de artefatos
+6. escrita do manifesto da execucao
+
+### `outputs.py`
+
+Responsavel por:
+
+1. gerar `novos_dominios.txt`
+2. gerar `whitelist.txt`
+3. gerar `relatorio.txt`
+4. salvar `pendente_atualizacao.json`
+5. confirmar a atualizacao da base
+6. gravar backup da base
+7. registrar dominios rejeitados
+
+### `runtime.py`
+
+Responsavel por:
+
+1. gerar `run_id`
+2. definir caminhos por execucao
+3. ler e gravar manifesto
+4. controlar lock de atualizacao da base
+
+### `audit.py`
+
+Le historico da auditoria no SQLite para alimentar a interface.
+
+### `models.py`
+
+Modelos simples de dados usados no fluxo de extracao.
+
+## Diretorios Operacionais
+
+Estes diretorios precisam existir e ser persistidos entre reinicios, principalmente em VM:
+
+1. `base/`
+2. `uploads/`
+3. `output/`
+4. `audits/`
+5. `logs/`
+6. `backups/`
+
+Descricao rapida:
+
+1. `base/`: arquivos mestres da operacao
+2. `uploads/`: arquivos enviados em cada execucao
+3. `output/`: saidas mais recentes e pasta `runs/`
+4. `audits/`: banco SQLite `auditoria.db`
+5. `logs/`: `app.log`
+6. `backups/`: copias da base antes das confirmacoes
+
+## Fluxo Funcional
+
+### 1. Upload
+
+O usuario envia arquivos `TXT` e `PDF` pela interface.
+
+### 2. Extracao
+
+Cada arquivo e processado separadamente.
+
+Regras importantes:
+
+1. `TXT` usa parser mais estrito
+2. `PDF` usa parser mais tolerante a ruido visual
+3. OCR e opcional
+4. o motor tenta reconstruir dominios quebrados por linha ou layout
+
+### 3. Comparacao
+
+Os dominios extraidos sao comparados com `base/base_atual.txt`.
+
+### 4. Classificacao
+
+O sistema separa:
+
+1. dominios que ja existem na base
+2. dominios que devem ser protegidos em whitelist
+3. dominios novos para bloqueio
+
+### 5. Artefatos
+
+Cada execucao gera artefatos por `run_id` em `output/runs/<run_id>/`.
+
+Arquivos esperados:
+
+1. `novos_dominios.txt`
+2. `whitelist.txt`
+3. `relatorio.txt`
+4. `pendente_atualizacao.json`
+5. `manifest.json`
+
+### 6. Confirmacao Manual
+
+A base so e atualizada depois da aprovacao manual.
+
+Ao confirmar:
+
+1. o sistema faz backup da base
+2. registra rejeicoes
+3. grava uma versao `base_atualizada_*.txt`
+4. atualiza `base/base_atual.txt`
+
+## Interface Web
+
+Arquivos:
+
+1. `templates/index.html`
+2. `static/app.js`
+3. `static/styles.css`
+
+A interface atual permite:
+
+1. upload multiplo
+2. acompanhamento do processamento
+3. visualizacao dos novos alvos
+4. visualizacao da whitelist
+5. confirmacao manual da atualizacao
+6. download dos artefatos
+7. consulta ao historico de auditoria
+
+## Configuracao Por Ambiente
 
 Variaveis principais:
 
@@ -140,239 +332,127 @@ Variaveis principais:
 12. `DOMAIN_GUARD_ENABLE_OCR`
 13. `DOMAIN_GUARD_OCR_ONLY_IF_NO_DOMAINS`
 14. `DOMAIN_GUARD_OCR_LANGUAGE`
-15. `DOMAIN_GUARD_RETENTION_RUN_DAYS`
-16. `DOMAIN_GUARD_RETENTION_UPLOAD_DAYS`
-17. `DOMAIN_GUARD_RETENTION_BACKUP_DAYS`
-18. `DOMAIN_GUARD_RETENTION_UPDATED_BASE_DAYS`
 
-Exemplo PowerShell:
+Recomendacao para VM:
 
-```powershell
-$env:DOMAIN_GUARD_HOST = "0.0.0.0"
-$env:DOMAIN_GUARD_PORT = "5000"
-$env:DOMAIN_GUARD_DATA_DIR = "C:\DomainGuard\data"
-python app.py
-```
+1. codigo em uma pasta
+2. dados operacionais em outra pasta
+3. `DOMAIN_GUARD_DATA_DIR` apontando para a pasta persistente de dados
 
-## Diretorios Operacionais
-
-Para uso em VM/VPS, o ideal e tratar `DOMAIN_GUARD_DATA_DIR` como raiz persistente dos dados operacionais.
-
-Estrutura padrao:
-
-```text
-<data_dir>/
-├── audits/
-├── backups/
-├── base/
-├── logs/
-├── output/
-│   └── runs/
-└── uploads/
-```
-
-O que precisa persistir entre reinicios:
-
-1. `base/`
-2. `audits/`
-3. `backups/`
-4. `logs/`
-5. `output/`
-6. `uploads/`
-
-Recomendacao pratica para servidor:
-
-1. codigo da aplicacao em uma pasta de deploy
-2. dados operacionais em outra pasta persistente, por exemplo `/opt/domain-guard/data` no Linux
-3. configurar `DOMAIN_GUARD_DATA_DIR` apontando para essa pasta
-
-Exemplo conceitual:
+Exemplo conceitual em Linux:
 
 ```text
 /opt/domain-guard/app
 /opt/domain-guard/data
 ```
 
-Ao iniciar, a aplicacao agora garante a criacao dos diretorios pais necessarios para base, logs, auditoria, backups, saidas e arquivos por execucao.
+## Como Executar Localmente
 
-## Uso
+### Instalacao
 
-1. Coloque a base atual em `base/base_atual.txt`.
-2. Execute `iniciar_plataforma.bat` ou rode manualmente:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Ou:
+
+```powershell
+.\setup.ps1
+```
+
+### Desenvolvimento Local
 
 ```powershell
 python app.py
 ```
 
-3. Acesse `http://127.0.0.1:5000` ou o host/porta configurados por ambiente.
-4. Envie um ou mais arquivos `.txt` ou `.pdf`.
-5. Revise o resultado da execucao.
-6. Baixe os artefatos gerados.
-7. Se estiver correto, confirme a atualizacao da base pela interface.
-
-Observacao: abrir `templates/index.html` diretamente no navegador nao executa a aplicacao. O processamento depende do servidor Flask local.
-
-## Execucao Em Servidor
-
-Para ambiente de servidor, a recomendacao agora e usar um servidor WSGI em vez de depender de `python app.py`.
-
-Instale as dependencias:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Subida recomendada com `waitress`:
+### Subida Recomendada Em Servidor Ou VM
 
 ```powershell
 python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
 ```
 
-Ou usando as variaveis de ambiente ja suportadas:
-
-```powershell
-$env:DOMAIN_GUARD_HOST = "0.0.0.0"
-$env:DOMAIN_GUARD_PORT = "5000"
-python -m waitress --host=$env:DOMAIN_GUARD_HOST --port=$env:DOMAIN_GUARD_PORT wsgi:app
-```
-
-Arquivos de entrada para servidor:
-
-1. `app.py`: aplicacao Flask
-2. `wsgi.py`: ponto de entrada para servidor WSGI
-
-`python app.py` continua util para desenvolvimento local e validacao rapida.
-
-## Checklist Rapido Antes Da VM
-
-1. Validar a suite de testes com `python -m unittest discover -s tests`
-2. Confirmar que o fluxo local continua funcional com `TXT` e `PDF`
-3. Definir o `DOMAIN_GUARD_DATA_DIR` persistente no servidor
-4. Separar pasta de codigo e pasta de dados operacionais
-5. Garantir acesso de escrita em `base/`, `output/`, `uploads/`, `audits/`, `logs/` e `backups/`
-6. Definir host e porta de subida
-7. Subir a aplicacao com `waitress`
-8. Validar acesso HTTP pela rede esperada
-9. Testar processamento, download e confirmacao da base no ambiente alvo
-
-## Retencao E Limpeza
-
-Politica inicial recomendada:
-
-1. `output/runs/`: manter `30` dias
-2. `uploads/`: manter `14` dias
-3. `backups/`: manter `90` dias
-4. `output/base_atualizada_*.txt`: manter `30` dias
-
-Esses valores podem ser ajustados por ambiente com:
-
-1. `DOMAIN_GUARD_RETENTION_RUN_DAYS`
-2. `DOMAIN_GUARD_RETENTION_UPLOAD_DAYS`
-3. `DOMAIN_GUARD_RETENTION_BACKUP_DAYS`
-4. `DOMAIN_GUARD_RETENTION_UPDATED_BASE_DAYS`
-
-Limpeza manual:
-
-```powershell
-.\.venv\Scripts\python.exe cleanup.py
-```
-
-Para ambiente Linux:
-
-```bash
-.venv/bin/python cleanup.py
-```
-
-O script remove apenas:
-
-1. diretorios antigos em `output/runs/`
-2. diretorios antigos em `uploads/`
-3. backups antigos em `backups/`
-4. arquivos antigos `base_atualizada_*.txt`
-
-Ele nao remove:
-
-1. `base/base_atual.txt`
-2. `base/base_rejeitados.txt`
-3. `audits/auditoria.db`
-4. `logs/app.log`
-
-## Artefatos Gerados
-
-### Saida global mais recente
-
-1. `output/novos_dominios.txt`
-2. `output/whitelist.txt`
-3. `output/relatorio.txt`
-4. `output/base_atualizada_YYYYMMDD_HHMMSS.txt`
-
-### Saida por execucao
-
-Cada processamento recebe um `run_id` e grava em:
-
-```text
-output/runs/<run_id>/
-```
-
-Arquivos principais:
-
-1. `novos_dominios.txt`
-2. `whitelist.txt`
-3. `relatorio.txt`
-4. `pendente_atualizacao.json`
-5. `manifest.json`
-
-## Rotas Principais
-
-1. `GET /`
-2. `POST /process`
-3. `POST /confirm-update`
-4. `GET /download/<name>`
-5. `GET /whitelist`
-
-`/confirm-update`, `/download/<name>` e `/whitelist` podem trabalhar com `run_id` para acessar artefatos especificos de uma execucao.
-
-Para operacao em servidor, o fluxo recomendado e sempre usar os artefatos vinculados ao `run_id` da execucao atual. Os arquivos globais em `output/` permanecem apenas como fallback operacional e compatibilidade.
-
 ## OCR
 
-Controlado por `config.py`:
+OCR depende de `Tesseract` instalado no sistema.
 
-1. `ENABLE_OCR`
-2. `OCR_ONLY_IF_NO_DOMAINS`
-3. `OCR_LANGUAGE`
+Importante:
 
-Se o `Tesseract` nao estiver instalado, PDFs com texto nativo continuam funcionando. PDFs escaneados podem gerar aviso no relatorio.
-
-## Seguranca Operacional
-
-1. Nenhum arquivo e enviado para servicos externos.
-2. A base principal so e atualizada apos confirmacao manual.
-3. Existe lock para evitar duas atualizacoes simultaneas da base.
-4. Cada execucao tem artefatos e manifesto proprios.
-5. Toda execucao relevante e registrada em `logs/app.log` e `audits/auditoria.db`.
-6. Um backup da base e criado antes da atualizacao em `backups/`.
+1. se o PDF ja entregar texto suficiente, o OCR pode ser ignorado
+2. se o PDF for escaneado, o resultado pode depender diretamente do Tesseract
+3. sem Tesseract, o restante do sistema continua funcionando, mas PDFs dependentes de OCR podem falhar
 
 ## Testes
 
-Execute:
+Suite atual cobre:
+
+1. extracao e normalizacao
+2. confirmacao da base
+3. artefatos por execucao
+4. rotas principais
+5. limpeza de artefatos
+6. validacao de configuracao
+7. historico de auditoria
+
+Comando:
 
 ```powershell
-python -m unittest discover -s tests
+.\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Os testes hoje cobrem, entre outros pontos:
+## Documentos Importantes Do Projeto
 
-1. normalizacao de dominio
-2. contagem sem duplicacao indevida
-3. whitelist estrita
-4. comparacao com a base
-5. artefatos por execucao
-6. regressao para dominios fragmentados em `PDF`
-7. regressao para dominios colados indevidamente em `PDF`
+1. `ARCHITECTURE.md`: divisao em camadas e direcao tecnica
+2. `INSTALL_VM.md`: guia de instalacao em VM/VPS
+3. `GUIA_EVOLUCAO_VM_E_LIBERACAO.txt`: backlog e criterios para evolucao antes de liberar para mais usuarios
 
-## Observacoes Importantes
+## Pontos De Atencao Para Continuidade
 
-1. A base atual pode conter entradas historicas operacionais com porta ou path.
-2. O motor atual tenta proteger a comparacao contra linhas malformadas antigas.
-3. O parser de `PDF` foi sendo refinado em cima de casos reais do acervo; novos exemplos concretos ajudam a melhorar o motor sem relaxar demais as validacoes.
+Para quem for assumir o projeto, os pontos mais importantes hoje sao:
+
+1. manter a estabilidade do motor de extracao
+2. aumentar regressao com casos reais de PDF problematico
+3. revisar o comportamento de OCR em ambiente de VM
+4. preservar a atualizacao manual da base como etapa segura
+5. nao liberar uso compartilhado sem login e auditoria por usuario
+
+## Handoff Para Continuidade Com Claude
+
+Se outra IA ou outro desenvolvedor for continuar o trabalho, o melhor ponto de entrada e:
+
+1. ler este `README.md`
+2. ler `ARCHITECTURE.md`
+3. ler `INSTALL_VM.md`
+4. ler `GUIA_EVOLUCAO_VM_E_LIBERACAO.txt`
+5. revisar `app.py` e o pacote `domain_processing/`
+6. executar a suite de testes
+
+Sequencia recomendada de entendimento do codigo:
+
+1. `app.py`
+2. `domain_processing/pipeline.py`
+3. `domain_processing/extraction.py`
+4. `domain_processing/classification.py`
+5. `domain_processing/outputs.py`
+6. `tests/test_processing.py`
+
+## Resumo Final
+
+O projeto e uma plataforma interna para extracao, comparacao, revisao e consolidacao manual de dominios.
+
+Hoje ele ja tem:
+
+1. fluxo funcional principal
+2. configuracao por ambiente
+3. rastreabilidade por execucao
+4. testes automatizados relevantes
+5. base tecnica suficiente para rodar em VM
+
+Os proximos passos naturais sao:
+
+1. consolidar uso em VM com testes manuais reais
+2. endurecer ainda mais a regressao com PDFs reais
+3. so depois disso adicionar login, perfis e auditoria por usuario para uso compartilhado

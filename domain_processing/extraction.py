@@ -16,6 +16,16 @@ NOISE_DOMAINS = {
     "to.com",
 }
 
+# TLDs que são extensões de arquivos ou ações de sistema (Java Struts, scripts),
+# jamais válidos como TLD real de domínio para bloqueio.
+NOISE_TLDS = {
+    "pdf", "doc", "docx", "xls", "xlsx", "xml", "json",
+    "png", "jpg", "jpeg", "gif", "bmp", "webp", "svg",
+    "js", "css", "txt", "csv", "sql",
+    "php", "asp", "aspx", "jsp", "html", "htm",
+    "exe", "zip", "rar", "tar", "gz",
+}
+
 INVALID_LINE_SEPARATORS = {"|"}
 WRAPPED_MULTI_LABEL_SUFFIXES = {
     ".co.uk",
@@ -126,8 +136,13 @@ def load_target_corrections(config: dict | None = None) -> dict[str, str]:
     return corrections
 
 
-def apply_target_corrections(targets: Iterable[str], config: dict | None = None) -> set[str]:
-    corrections = load_target_corrections(config)
+def apply_target_corrections(
+    targets: Iterable[str],
+    config: dict | None = None,
+    corrections: dict[str, str] | None = None,
+) -> set[str]:
+    if corrections is None:
+        corrections = load_target_corrections(config)
     return {corrections.get(target, target) for target in targets}
 
 
@@ -145,7 +160,17 @@ def normalize_domain(value: str) -> str | None:
         return None
 
     labels = candidate.split(".")
-    if len(labels[-1]) < 2 or not labels[-1].isalpha():
+    tld = labels[-1]
+    if len(tld) < 2 or not tld.isalpha():
+        return None
+
+    # Descartar extensões de arquivo e scripts disfarçados de domínio (ex: relatorio.pdf)
+    if tld in NOISE_TLDS:
+        return None
+
+    # Descartar ações Java Struts ou fragmentos em português de 2 rótulos com .do
+    # O TLD real .do (República Dominicana) só é válido com subdomain: sub.example.do
+    if tld == "do" and len(labels) == 2:
         return None
 
     for label in labels:
@@ -522,6 +547,7 @@ def load_base_reference_state(path: Path) -> tuple[set[str], set[str], int]:
     if not path.exists():
         return set(), set(), 0
 
+    corrections = load_target_corrections()
     exact_targets: set[str] = set()
     domain_targets: set[str] = set()
     entry_count = 0
@@ -533,7 +559,7 @@ def load_base_reference_state(path: Path) -> tuple[set[str], set[str], int]:
         entry_count += 1
         target = normalize_block_target(clean)
         if target:
-            corrected = apply_target_corrections({target})
+            corrected = apply_target_corrections({target}, corrections=corrections)
             corrected_target = next(iter(corrected))
             exact_targets.add(corrected_target)
             if not is_specific_block_target(corrected_target):

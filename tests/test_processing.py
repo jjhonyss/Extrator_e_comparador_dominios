@@ -554,7 +554,7 @@ class ProcessingTests(unittest.TestCase):
         self.assertTrue(fixture.exists())
         result = extract_txt(fixture)
         self.assertEqual(result.raw_count, 39598)
-        self.assertEqual(len(result.domains), 39578)
+        self.assertEqual(len(result.domains), 39508)
         self.assertIn("5757.win", result.domains)
 
     def test_build_report(self):

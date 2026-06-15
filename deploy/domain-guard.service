@@ -1,0 +1,14 @@
+[Unit]
+Description=Domain Guard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/domain-guard/app
+EnvironmentFile=/opt/domain-guard/app/.env.vps
+ExecStart=/opt/domain-guard/app/.venv/bin/python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

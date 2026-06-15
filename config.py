@@ -57,7 +57,7 @@ CONFIG = {
     "HOST": env_text("DOMAIN_GUARD_HOST", "127.0.0.1"),
     "PORT": env_int("DOMAIN_GUARD_PORT", 5000),
     "DATA_DIR": DATA_DIR,
-    "MAX_FILE_SIZE": env_int("DOMAIN_GUARD_MAX_FILE_SIZE", 50 * 1024 * 1024),
+    "MAX_FILE_SIZE": env_int("DOMAIN_GUARD_MAX_FILE_SIZE", 500 * 1024 * 1024),
     "ALLOWED_EXTENSIONS": env_extensions("DOMAIN_GUARD_ALLOWED_EXTENSIONS", {".pdf", ".txt"}),
     "BASE_FILE_PATH": env_path("DOMAIN_GUARD_BASE_FILE_PATH", DATA_DIR / "base" / "base_atual.txt"),
     "TARGET_CORRECTIONS_PATH": env_path("DOMAIN_GUARD_TARGET_CORRECTIONS_PATH", DATA_DIR / "base" / "correcoes_manuais.txt"),
