@@ -218,6 +218,35 @@ class ProcessingTests(unittest.TestCase):
         self.assertIn("alpha.com", domains)
         self.assertNotIn("e.page", domains)
 
+    def test_merge_wrapped_domain_lines_does_not_join_valid_domain_with_short_country_tld(self):
+        # Regressao: xilften.fr + www.xilften.fr nao deve virar xilften.frwww.xilften.fr
+        lines = merge_wrapped_domain_lines(["xilften.fr", "www.xilften.fr", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("xilften.fr", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("xilften.frwww.xilften.fr", domains)
+
+    def test_merge_wrapped_domain_lines_does_not_join_valid_domain_followed_by_uncommon_tld(self):
+        # Regressao: overflix.ac + www.overflixtv.cyou nao deve virar overflix.acwww.overflixtv.cyou
+        lines = merge_wrapped_domain_lines(["overflix.ac", "www.overflixtv.cyou", "alpha.com"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("overflix.ac", domains)
+        self.assertIn("overflixtv.cyou", domains)
+        self.assertIn("alpha.com", domains)
+        self.assertNotIn("overflix.acwww.overflixtv.cyou", domains)
+
+    def test_merge_wrapped_domain_lines_does_not_join_multi_label_br_with_uncommon_tld(self):
+        # Regressao: dunatv.pro.br + duosat.live e reieletrotv.com.br + unitv.bet nao devem se fundir
+        lines = merge_wrapped_domain_lines(["dunatv.pro.br", "duosat.live", "reieletrotv.com.br", "unitv.bet"])
+        domains, _duplicates, _raw_count = extract_domains_from_lines(lines)
+        self.assertIn("dunatv.pro.br", domains)
+        self.assertIn("duosat.live", domains)
+        self.assertIn("reieletrotv.com.br", domains)
+        self.assertIn("unitv.bet", domains)
+        self.assertNotIn("dunatv.pro.brduosat.live", domains)
+        self.assertNotIn("reieletrotv.com.brunitv.bet", domains)
+
+
     def test_extract_txt(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "entrada.txt"
