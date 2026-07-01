@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Domain Guard - Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="dark">
+  <main class="login-shell">
+    <section class="panel login-card">
+      <div class="brand login-brand">
+        <span>DG</span>
+        <div>
+          <strong>Domain Guard</strong>
+          <small>Extrator e comparador de dominios</small>
+        </div>
+      </div>
+
+      <h1 class="login-title">Acesso restrito</h1>
+      <p class="login-subtitle">Entre com suas credenciais para continuar.</p>
+
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" class="login-form">
+        <label>
+          <span>Usuario</span>
+          <input type="text" name="username" autocomplete="username" required autofocus>
+        </label>
+        <label>
+          <span>Senha</span>
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="primary-button login-submit">Entrar</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

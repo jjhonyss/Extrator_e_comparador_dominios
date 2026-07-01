@@ -976,6 +976,91 @@ dialog .secondary-button {
   word-break: break-word;
 }
 
+/* Login Page */
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.login-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+.login-subtitle {
+  margin-top: -12px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.login-error {
+  padding: 10px 14px;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-danger-bg);
+  border: 1px solid hsla(358, 85%, 60%, 0.25);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.login-form input {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: 12px 14px;
+  background: var(--panel-soft);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  transition: var(--transition-smooth);
+}
+
+.login-form input:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 960px) {
   .work-grid,

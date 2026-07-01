@@ -42,6 +42,8 @@ class AppRouteTests(unittest.TestCase):
         ensure_directories(app_module.CONFIG)
         app_module.init_database()
         self.client = app_module.app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["authenticated"] = True
 
     def tearDown(self):
         self.config_patcher.stop()

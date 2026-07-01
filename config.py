@@ -50,6 +50,24 @@ def env_extensions(name: str, default: set[str]) -> set[str]:
     return extensions or default
 
 
+def env_users(name: str) -> dict[str, str]:
+    value = os.getenv(name)
+    if not value or not value.strip():
+        return {}
+
+    users = {}
+    for entry in value.split(","):
+        entry = entry.strip()
+        if not entry or ":" not in entry:
+            continue
+        username, password_hash = entry.split(":", 1)
+        username = username.strip()
+        password_hash = password_hash.strip()
+        if username and password_hash:
+            users[username] = password_hash
+    return users
+
+
 DATA_DIR = env_path("DOMAIN_GUARD_DATA_DIR", BASE_DIR)
 OUTPUT_DIR = env_path("DOMAIN_GUARD_OUTPUT_DIR", DATA_DIR / "output")
 
@@ -82,4 +100,7 @@ CONFIG = {
     "RETENTION_UPLOAD_DAYS": env_int("DOMAIN_GUARD_RETENTION_UPLOAD_DAYS", 14),
     "RETENTION_BACKUP_DAYS": env_int("DOMAIN_GUARD_RETENTION_BACKUP_DAYS", 90),
     "RETENTION_UPDATED_BASE_DAYS": env_int("DOMAIN_GUARD_RETENTION_UPDATED_BASE_DAYS", 30),
+    "AUTH_USERS": env_users("DOMAIN_GUARD_AUTH_USERS"),
+    "SECRET_KEY": env_text("DOMAIN_GUARD_SECRET_KEY", ""),
+    "SESSION_HOURS": env_int("DOMAIN_GUARD_SESSION_HOURS", 8),
 }

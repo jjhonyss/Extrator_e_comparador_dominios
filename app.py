@@ -1,11 +1,13 @@
 import json
 import logging
+import secrets
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
+from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 
 from config import CONFIG
@@ -129,10 +131,52 @@ def create_app() -> Flask:
     initialize_runtime()
     flask_app = Flask(__name__)
     flask_app.config["MAX_CONTENT_LENGTH"] = CONFIG["MAX_FILE_SIZE"]
+    flask_app.secret_key = CONFIG["SECRET_KEY"] or secrets.token_hex(32)
+    flask_app.permanent_session_lifetime = timedelta(hours=CONFIG["SESSION_HOURS"])
     return flask_app
 
 
 app = create_app()
+
+PUBLIC_ENDPOINTS = {"login", "static"}
+
+
+@app.before_request
+def require_login():
+    if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
+        return None
+    if session.get("authenticated"):
+        return None
+    if request.method == "GET" and request.path == "/":
+        return redirect(url_for("login", next=request.path))
+    return jsonify({"error": "Sessao expirada. Faca login novamente."}), 401
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("authenticated"):
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        password_hash = CONFIG["AUTH_USERS"].get(username)
+        if password_hash and check_password_hash(password_hash, password):
+            session.clear()
+            session["authenticated"] = True
+            session.permanent = True
+            next_url = request.args.get("next") or url_for("index")
+            return redirect(next_url)
+        error = "Usuario ou senha invalidos."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 @app.route("/")
