@@ -62,6 +62,18 @@ export DOMAIN_GUARD_DATA_DIR=/opt/domain-guard/data
 python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
 ```
 
+### Subida Via `systemd` (`deploy/domain-guard.service`)
+
+O unit file assume um usuario de sistema dedicado `domain-guard` (nao root), com permissao apenas no diretorio de dados. Antes de habilitar o servico:
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin domain-guard
+chown -R domain-guard:domain-guard /opt/domain-guard/app /opt/domain-guard/data
+cp deploy/domain-guard.service /etc/systemd/system/domain-guard.service
+systemctl daemon-reload
+systemctl enable --now domain-guard
+```
+
 ## Passo A Passo Windows Server
 
 Se a escolha for Windows Server, o fluxo minimo e:

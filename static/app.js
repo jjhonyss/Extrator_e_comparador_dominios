@@ -25,6 +25,7 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 const refreshHistory = document.querySelector("#refreshHistory");
 const historyStatus = document.querySelector("#historyStatus");
 const historyTableBody = document.querySelector("#historyTableBody");
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
 
 let selectedFiles = [];
 let blocklistItems = [];
@@ -309,6 +310,7 @@ processButton.addEventListener("click", () => {
 
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/process");
+  xhr.setRequestHeader("X-CSRF-Token", csrfToken);
   processButton.disabled = true;
   progressBar.style.width = "0%";
   downloadBase.classList.add("disabled");
@@ -375,7 +377,7 @@ confirmUpdateButton.addEventListener("click", async () => {
   try {
     const response = await fetch("/confirm-update", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
       body: JSON.stringify({
         run_id: currentRunId,
         approved_domains: blocklistItems.filter((domain) => approvedDomains.has(domain)),

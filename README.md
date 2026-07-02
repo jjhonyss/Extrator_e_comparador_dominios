@@ -332,6 +332,9 @@ Variaveis principais:
 12. `DOMAIN_GUARD_ENABLE_OCR`
 13. `DOMAIN_GUARD_OCR_ONLY_IF_NO_DOMAINS`
 14. `DOMAIN_GUARD_OCR_LANGUAGE`
+15. `DOMAIN_GUARD_SESSION_COOKIE_SECURE` (default `true`; exige HTTPS para o cookie de sessao)
+16. `DOMAIN_GUARD_LOGIN_MAX_ATTEMPTS` (default `3`)
+17. `DOMAIN_GUARD_LOGIN_LOCKOUT_MINUTES` (default `15`)
 
 Recomendacao para VM:
 
@@ -368,6 +371,8 @@ Ou:
 ```powershell
 python app.py
 ```
+
+Por padrao o cookie de sessao exige HTTPS (`SESSION_COOKIE_SECURE=True`). Para testar localmente via `http://` (sem TLS), defina `DOMAIN_GUARD_SESSION_COOKIE_SECURE=false` antes de subir a aplicacao, senao o login nao persiste entre requisicoes.
 
 ### Subida Recomendada Em Servidor Ou VM
 

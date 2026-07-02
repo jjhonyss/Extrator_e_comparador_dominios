@@ -42,15 +42,20 @@ class AppRouteTests(unittest.TestCase):
         ensure_directories(app_module.CONFIG)
         app_module.init_database()
         self.client = app_module.app.test_client()
+        self.csrf_token = "test-csrf-token"
         with self.client.session_transaction() as sess:
             sess["authenticated"] = True
+            sess["csrf_token"] = self.csrf_token
+        self.csrf_headers = {"X-CSRF-Token": self.csrf_token}
 
     def tearDown(self):
         self.config_patcher.stop()
         self.temp_dir.cleanup()
 
     def test_process_requires_files(self):
-        response = self.client.post("/process", data={}, content_type="multipart/form-data")
+        response = self.client.post(
+            "/process", data={}, content_type="multipart/form-data", headers=self.csrf_headers
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "Nenhum arquivo enviado")
@@ -62,6 +67,7 @@ class AppRouteTests(unittest.TestCase):
                 "files": (io.BytesIO(b"bet365.com\ninstagram.com\n"), "entrada.txt"),
             },
             content_type="multipart/form-data",
+            headers=self.csrf_headers,
         )
 
         payload = response.get_json()
@@ -72,7 +78,9 @@ class AppRouteTests(unittest.TestCase):
 
     def test_confirm_update_returns_conflict_when_locked(self):
         with patch("app.confirm_pending_update", side_effect=TimeoutError("Atualizacao de base em andamento; tente novamente em instantes")):
-            response = self.client.post("/confirm-update", json={"run_id": "run_teste"})
+            response = self.client.post(
+                "/confirm-update", json={"run_id": "run_teste"}, headers=self.csrf_headers
+            )
 
         self.assertEqual(response.status_code, 409)
         self.assertIn("Atualizacao de base em andamento", response.get_json()["error"])
@@ -84,6 +92,7 @@ class AppRouteTests(unittest.TestCase):
                 "files": (io.BytesIO(b"novodominio.bet\n"), "entrada.txt"),
             },
             content_type="multipart/form-data",
+            headers=self.csrf_headers,
         )
         process_payload = process_response.get_json()
 
@@ -94,6 +103,7 @@ class AppRouteTests(unittest.TestCase):
                 "approved_domains": process_payload["blocklist"],
                 "rejected_domains": [],
             },
+            headers=self.csrf_headers,
         )
 
         download_response = self.client.get(f"/download/base_atualizada?run_id={process_payload['run_id']}")
@@ -112,6 +122,7 @@ class AppRouteTests(unittest.TestCase):
                 "files": (io.BytesIO(b"bet365.com\n"), "entrada.txt"),
             },
             content_type="multipart/form-data",
+            headers=self.csrf_headers,
         )
 
         response = self.client.get("/audit-history")

@@ -2,6 +2,8 @@ import json
 import logging
 import secrets
 import sqlite3
+import threading
+import time
 from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +27,9 @@ from processing import (
 
 
 _runtime_initialized = False
+
+_login_attempts: dict[str, list[float]] = {}
+_login_attempts_lock = threading.Lock()
 
 
 class RuntimeConfigError(RuntimeError):
@@ -133,6 +138,9 @@ def create_app() -> Flask:
     flask_app.config["MAX_CONTENT_LENGTH"] = CONFIG["MAX_FILE_SIZE"]
     flask_app.secret_key = CONFIG["SECRET_KEY"] or secrets.token_hex(32)
     flask_app.permanent_session_lifetime = timedelta(hours=CONFIG["SESSION_HOURS"])
+    flask_app.config["SESSION_COOKIE_HTTPONLY"] = True
+    flask_app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    flask_app.config["SESSION_COOKIE_SECURE"] = CONFIG["SESSION_COOKIE_SECURE"]
     return flask_app
 
 
@@ -141,15 +149,61 @@ app = create_app()
 PUBLIC_ENDPOINTS = {"login", "static"}
 
 
+def _login_rate_limit_key(username: str) -> str:
+    return username.strip().lower()
+
+
+def is_login_rate_limited(username: str) -> bool:
+    key = _login_rate_limit_key(username)
+    if not key:
+        return False
+    window_seconds = CONFIG["LOGIN_LOCKOUT_MINUTES"] * 60
+    now = time.monotonic()
+    with _login_attempts_lock:
+        attempts = [attempt for attempt in _login_attempts.get(key, []) if now - attempt < window_seconds]
+        _login_attempts[key] = attempts
+        return len(attempts) >= CONFIG["LOGIN_MAX_ATTEMPTS"]
+
+
+def register_login_failure(username: str) -> None:
+    key = _login_rate_limit_key(username)
+    if not key:
+        return
+    with _login_attempts_lock:
+        _login_attempts.setdefault(key, []).append(time.monotonic())
+
+
+def clear_login_attempts(username: str) -> None:
+    key = _login_rate_limit_key(username)
+    with _login_attempts_lock:
+        _login_attempts.pop(key, None)
+
+
+def get_csrf_token() -> str:
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_hex(16)
+        session["csrf_token"] = token
+    return token
+
+
+def csrf_token_is_valid() -> bool:
+    expected = session.get("csrf_token")
+    provided = request.headers.get("X-CSRF-Token", "")
+    return bool(expected) and secrets.compare_digest(expected, provided)
+
+
 @app.before_request
 def require_login():
     if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
         return None
-    if session.get("authenticated"):
-        return None
-    if request.method == "GET" and request.path == "/":
-        return redirect(url_for("login", next=request.path))
-    return jsonify({"error": "Sessao expirada. Faca login novamente."}), 401
+    if not session.get("authenticated"):
+        if request.method == "GET" and request.path == "/":
+            return redirect(url_for("login", next=request.path))
+        return jsonify({"error": "Sessao expirada. Faca login novamente."}), 401
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not csrf_token_is_valid():
+        return jsonify({"error": "Token CSRF invalido ou ausente."}), 403
+    return None
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -161,13 +215,19 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
+        if is_login_rate_limited(username):
+            error = "Muitas tentativas de login. Aguarde alguns minutos e tente novamente."
+            return render_template("login.html", error=error), 429
         password_hash = CONFIG["AUTH_USERS"].get(username)
         if password_hash and check_password_hash(password_hash, password):
+            clear_login_attempts(username)
             session.clear()
             session["authenticated"] = True
+            session["csrf_token"] = secrets.token_hex(16)
             session.permanent = True
             next_url = request.args.get("next") or url_for("index")
             return redirect(next_url)
+        register_login_failure(username)
         error = "Usuario ou senha invalidos."
 
     return render_template("login.html", error=error)
@@ -181,7 +241,11 @@ def logout():
 
 @app.route("/")
 def index():
-    return render_template("index.html", max_file_size_mb=CONFIG["MAX_FILE_SIZE"] // (1024 * 1024))
+    return render_template(
+        "index.html",
+        max_file_size_mb=CONFIG["MAX_FILE_SIZE"] // (1024 * 1024),
+        csrf_token=get_csrf_token(),
+    )
 
 
 @app.route("/process", methods=["POST"])
@@ -237,16 +301,19 @@ def process_uploads():
 @app.route("/download/<name>")
 def download_file(name: str):
     run_id = request.args.get("run_id")
-    run_paths = get_run_file_paths(CONFIG, run_id) if run_id else {}
-    allowed_downloads = {
-        "novos_dominios": run_paths.get("blocklist", CONFIG["OUTPUT_PATH"]),
-        "whitelist": run_paths.get("whitelist", CONFIG["WHITELIST_PATH"]),
-        "relatorio": run_paths.get("report", CONFIG["REPORT_PATH"]),
-    }
-    if name == "base_atualizada":
-        path = run_updated_base_path(CONFIG, run_id) if run_id else latest_updated_base_path(CONFIG)
-    else:
-        path = allowed_downloads.get(name)
+    try:
+        run_paths = get_run_file_paths(CONFIG, run_id) if run_id else {}
+        if name == "base_atualizada":
+            path = run_updated_base_path(CONFIG, run_id) if run_id else latest_updated_base_path(CONFIG)
+        else:
+            allowed_downloads = {
+                "novos_dominios": run_paths.get("blocklist", CONFIG["OUTPUT_PATH"]),
+                "whitelist": run_paths.get("whitelist", CONFIG["WHITELIST_PATH"]),
+                "relatorio": run_paths.get("report", CONFIG["REPORT_PATH"]),
+            }
+            path = allowed_downloads.get(name)
+    except ValueError:
+        return jsonify({"error": "run_id invalido"}), 400
     if not path or not Path(path).exists():
         return jsonify({"error": "Arquivo nao encontrado"}), 404
     return send_file(path, as_attachment=True)
@@ -268,6 +335,9 @@ def confirm_update():
     except TimeoutError as exc:
         logging.warning("Atualizacao de base bloqueada: %s", exc)
         return jsonify({"error": str(exc)}), 409
+    except ValueError as exc:
+        logging.warning("run_id invalido em confirm-update: %s", exc)
+        return jsonify({"error": "run_id invalido"}), 400
     except sqlite3.Error as exc:
         logging.exception("Falha no banco ao confirmar atualizacao")
         return jsonify({"error": f"Falha ao registrar auditoria de rejeicoes: {exc}"}), 500
@@ -282,7 +352,10 @@ def confirm_update():
 @app.route("/whitelist")
 def view_whitelist():
     run_id = request.args.get("run_id")
-    path = get_run_file_paths(CONFIG, run_id)["whitelist"] if run_id else Path(CONFIG["WHITELIST_PATH"])
+    try:
+        path = get_run_file_paths(CONFIG, run_id)["whitelist"] if run_id else Path(CONFIG["WHITELIST_PATH"])
+    except ValueError:
+        return jsonify({"error": "run_id invalido"}), 400
     content = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
     return jsonify({"content": content})
 

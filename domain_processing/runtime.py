@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -7,16 +8,29 @@ from datetime import datetime
 from pathlib import Path
 
 
+RUN_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}$")
+
+
 def generate_run_id() -> str:
     return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
 
+def is_valid_run_id(run_id: str) -> bool:
+    return bool(run_id) and bool(RUN_ID_PATTERN.fullmatch(run_id))
+
+
+def _require_valid_run_id(run_id: str) -> str:
+    if not is_valid_run_id(run_id):
+        raise ValueError(f"run_id invalido: {run_id!r}")
+    return run_id
+
+
 def get_run_dir(config: dict, run_id: str) -> Path:
-    return Path(config["RUNS_DIR"]) / run_id
+    return Path(config["RUNS_DIR"]) / _require_valid_run_id(run_id)
 
 
 def get_run_upload_dir(config: dict, run_id: str) -> Path:
-    return Path(config["UPLOAD_DIR"]) / run_id
+    return Path(config["UPLOAD_DIR"]) / _require_valid_run_id(run_id)
 
 
 def get_run_file_paths(config: dict, run_id: str) -> dict[str, Path]:

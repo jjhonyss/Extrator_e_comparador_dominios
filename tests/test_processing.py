@@ -360,10 +360,10 @@ class ProcessingTests(unittest.TestCase):
             config["OUTPUT_DIR"].mkdir()
             config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
-            run_id = "run_teste"
+            run_id = "20260101_120000_abcdef12"
             run_paths = get_run_file_paths(config, run_id)
             run_paths["run_dir"].mkdir(parents=True)
-            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["a.com", "b.com"]}', encoding="utf-8")
+            run_paths["pending_update"].write_text('{"run_id": "20260101_120000_abcdef12", "domains": ["a.com", "b.com"]}', encoding="utf-8")
 
             first = confirm_pending_update(config, run_id=run_id)
             second = confirm_pending_update(config, run_id=run_id)
@@ -389,10 +389,10 @@ class ProcessingTests(unittest.TestCase):
             config["OUTPUT_DIR"].mkdir()
             config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\nA.COM\n", encoding="utf-8")
-            run_id = "run_teste"
+            run_id = "20260101_120000_abcdef12"
             run_paths = get_run_file_paths(config, run_id)
             run_paths["run_dir"].mkdir(parents=True)
-            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["b.com"]}', encoding="utf-8")
+            run_paths["pending_update"].write_text('{"run_id": "20260101_120000_abcdef12", "domains": ["b.com"]}', encoding="utf-8")
 
             result = confirm_pending_update(config, run_id=run_id)
             entries = load_base_entries(config["BASE_FILE_PATH"])
@@ -421,11 +421,11 @@ class ProcessingTests(unittest.TestCase):
             config["RUNS_DIR"].mkdir(parents=True)
             config["AUDIT_DIR"].mkdir()
             config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
-            run_id = "run_teste"
+            run_id = "20260101_120000_abcdef12"
             run_paths = get_run_file_paths(config, run_id)
             run_paths["run_dir"].mkdir(parents=True)
             run_paths["pending_update"].write_text(
-                '{"run_id": "run_teste", "domains": ["a.com", "b.com", "c.com"]}',
+                '{"run_id": "20260101_120000_abcdef12", "domains": ["a.com", "b.com", "c.com"]}',
                 encoding="utf-8",
             )
 
@@ -444,7 +444,7 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(result["rejected_count"], 1)
         self.assertEqual(entries, ["a.com", "b.com"])
         self.assertEqual(rejected_entries, ["c.com"])
-        self.assertEqual(rows, [("c.com", "run_teste")])
+        self.assertEqual(rows, [("c.com", "20260101_120000_abcdef12")])
 
     def test_process_files_creates_run_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -501,11 +501,11 @@ class ProcessingTests(unittest.TestCase):
             config["OUTPUT_DIR"].mkdir()
             config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
-            run_id = "run_teste"
+            run_id = "20260101_120000_abcdef12"
             run_paths = get_run_file_paths(config, run_id)
             run_paths["run_dir"].mkdir(parents=True)
-            run_paths["manifest"].write_text('{"run_id": "run_teste"}', encoding="utf-8")
-            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["b.com"]}', encoding="utf-8")
+            run_paths["manifest"].write_text('{"run_id": "20260101_120000_abcdef12"}', encoding="utf-8")
+            run_paths["pending_update"].write_text('{"run_id": "20260101_120000_abcdef12", "domains": ["b.com"]}', encoding="utf-8")
 
             result = confirm_pending_update(config, run_id=run_id)
             manifest = read_run_manifest(config, run_id)
@@ -536,10 +536,10 @@ class ProcessingTests(unittest.TestCase):
             config["OUTPUT_DIR"].mkdir()
             config["RUNS_DIR"].mkdir(parents=True)
             config["BASE_FILE_PATH"].write_text("a.com\n", encoding="utf-8")
-            run_id = "run_teste"
+            run_id = "20260101_120000_abcdef12"
             run_paths = get_run_file_paths(config, run_id)
             run_paths["run_dir"].mkdir(parents=True)
-            run_paths["pending_update"].write_text('{"run_id": "run_teste", "domains": ["a.com"]}', encoding="utf-8")
+            run_paths["pending_update"].write_text('{"run_id": "20260101_120000_abcdef12", "domains": ["a.com"]}', encoding="utf-8")
 
             first = confirm_pending_update(config, run_id=run_id, approved_domains=["a.com", "b.com"], rejected_domains=[])
             second = confirm_pending_update(config, run_id=run_id)
