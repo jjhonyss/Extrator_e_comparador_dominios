@@ -7,49 +7,114 @@
   <title>Domain Guard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="dark">
-  <main class="shell">
-    <header class="header">
+  <input type="checkbox" id="navToggle" class="nav-toggle-checkbox">
+
+  <div class="app-shell">
+    <aside class="sidebar">
       <a class="brand" href="/">
-        <span>DG</span>
+        <span>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3.5v5.2c0 4.8-3.2 8.4-7 9.8-3.8-1.4-7-5-7-9.8V6.5L12 3z"/></svg>
+        </span>
         <div>
           <strong>Domain Guard</strong>
           <small>Extrator e comparador de domínios</small>
         </div>
       </a>
-      <div class="header-actions">
-        <span class="badge">Local</span>
-        <span class="badge">Confirmação manual</span>
-        <button id="themeToggle" class="ghost-button" type="button">Modo claro</button>
-        <a class="ghost-button" href="/logout">Sair</a>
-      </div>
-    </header>
 
-    <nav class="tabs" aria-label="Navegação principal">
-      <button class="tab-button active" type="button" data-tab-target="mainPanel">Painel Principal</button>
-      <button class="tab-button" type="button" data-tab-target="historyPanel">Histórico de Auditoria</button>
-    </nav>
+      <nav class="side-nav" aria-label="Navegação principal">
+        <button class="tab-button active" type="button" data-tab-target="mainPanel">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="3.5" width="7" height="4.5" rx="1.2"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.2"/><rect x="3.5" y="13" width="7" height="7.5" rx="1.2"/></svg>
+          Dashboard
+        </button>
+        <button class="tab-button" type="button" data-tab-target="historyPanel">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v5h5"/><path d="M4.3 14a8 8 0 1 0 2-8.6L3.5 8.5"/><path d="M12 8v4.5l3 2"/></svg>
+          Histórico de Auditoria
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <details class="user-card">
+          <summary>
+            <span class="user-avatar">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6.2 7-6.2s7 2.6 7 6.2"/></svg>
+            </span>
+            <span class="user-info">
+              <strong>Sessão ativa</strong>
+              <small>Acesso autenticado</small>
+            </span>
+            <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </summary>
+          <div class="user-card-menu">
+            <a href="/logout">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4H18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3.5"/><path d="M9.5 8.5L4.8 12l4.7 3.5"/><path d="M4.8 12h11"/></svg>
+              Sair
+            </a>
+          </div>
+        </details>
+
+        <div class="status-card">
+          <span class="status-dot"></span>
+          <span class="status-card-text">
+            <strong>Sessão ativa</strong>
+            <small>Conectado ao servidor</small>
+          </span>
+          <svg viewBox="0 0 24 10" class="sparkline" width="46" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1,7 5,4 8,8 12,2 16,6 20,3 23,5"/>
+          </svg>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="topbar-greeting">
+          <label for="navToggle" class="hamburger-btn" aria-label="Abrir menu">☰</label>
+          <h1>Olá! 👋</h1>
+          <p>Monitore, extraia e mantenha sua base de domínios sempre atualizada.</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="themeToggle" class="ghost-button" type="button">Modo claro</button>
+          <a class="ghost-button" href="/logout">Sair</a>
+        </div>
+      </div>
 
     <section id="mainPanel" class="tab-panel active">
       <section class="stats-grid" aria-label="Resumo do processamento">
         <article class="stat-card">
-          <span>Domínios lidos</span>
+          <span class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.6 3.8 5.9 3.8 9s-1.4 6.4-3.8 9c-2.4-2.6-3.8-5.9-3.8-9s1.4-6.4 3.8-9z"/></svg>
+          </span>
           <strong id="domainsExtracted">0</strong>
+          <span class="stat-label">Domínios lidos</span>
+          <span class="stat-desc">Extraídos dos arquivos enviados</span>
         </article>
         <article class="stat-card">
-          <span>Novos na base</span>
+          <span class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/><path d="M4 11.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+          </span>
           <strong id="newDomains">0</strong>
+          <span class="stat-label">Novos na base</span>
+          <span class="stat-desc">Ainda não constavam na base atual</span>
         </article>
-        <article class="stat-card safe">
-          <span>Whitelist</span>
+        <article class="stat-card">
+          <span class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3.5v5.2c0 4.8-3.2 8.4-7 9.8-3.8-1.4-7-5-7-9.8V6.5L12 3z"/></svg>
+          </span>
           <strong id="whitelistCount">0</strong>
+          <span class="stat-label">Whitelist</span>
+          <span class="stat-desc">Confirmados como seguros</span>
         </article>
-        <article class="stat-card danger">
-          <span>Para incrementar</span>
+        <article class="stat-card">
+          <span class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.4"/><path d="M20 20v-4.6h-4.6"/></svg>
+          </span>
           <strong id="blocklistCount">0</strong>
+          <span class="stat-label">Para incrementar</span>
+          <span class="stat-desc">Aguardando confirmação manual</span>
         </article>
       </section>
 
@@ -58,16 +123,23 @@
           <div class="panel-title">
             <div>
               <span class="eyebrow">Upload</span>
-              <h2>Arquivos para processamento</h2>
+              <h2>Upload de Arquivos</h2>
+              <p>Envie arquivos para processamento</p>
             </div>
-            <span class="badge">PDF/TXT ate {{ max_file_size_mb }}MB</span>
           </div>
 
           <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Selecionar arquivos">
             <input id="fileInput" type="file" name="files" multiple accept=".txt,.pdf">
-            <span class="drop-icon">+</span>
-            <strong>Arraste arquivos aqui</strong>
+            <span class="drop-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-1-8.9 5.5 5.5 0 0 1 10.7-2A4.5 4.5 0 0 1 17 18H7z"/><path d="M12 11v6"/><path d="M9.5 13.5L12 11l2.5 2.5"/></svg>
+            </span>
+            <strong>Arraste e solte seus arquivos aqui</strong>
             <small>ou clique para selecionar</small>
+            <div class="drop-zone-badges">
+              <span class="badge">PDF</span>
+              <span class="badge">TXT</span>
+              <span class="badge">Máx. {{ max_file_size_mb }}MB</span>
+            </div>
           </div>
 
           <div class="progress-area">
@@ -86,7 +158,7 @@
           <div class="panel-title">
             <div>
               <span class="eyebrow">Fila</span>
-              <h2>Selecionados</h2>
+              <h2>Arquivos Selecionados</h2>
             </div>
           </div>
 
@@ -95,12 +167,26 @@
           </ul>
 
           <div class="actions">
-            <button id="processButton" class="primary-button" type="button" disabled>Extrair e comparar</button>
-            <button id="confirmUpdateButton" class="primary-button" type="button" disabled>Confirmar atualização</button>
-            <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">Baixar novos</a>
-            <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">Baixar base atualizada</a>
-            <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">Baixar relatório</a>
-            <button id="viewWhitelist" class="secondary-button" type="button">Ver whitelist</button>
+            <button id="processButton" class="primary-button" type="button" disabled>Extrair e Comparar</button>
+            <button id="confirmUpdateButton" class="secondary-button outline-full" type="button" disabled>Confirmar Atualização</button>
+            <div class="actions-row">
+              <a class="secondary-button disabled" id="downloadBlocklist" href="/download/novos_dominios">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></svg>
+                Baixar novos
+              </a>
+              <a class="secondary-button disabled" id="downloadBase" href="/download/base_atualizada">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></svg>
+                Baixar base
+              </a>
+              <a class="secondary-button disabled" id="downloadReport" href="/download/relatorio">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></svg>
+                Baixar relatório
+              </a>
+              <button id="viewWhitelist" class="secondary-button" type="button">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M14 3.5V8h4"/><path d="M8.5 12.5h7"/><path d="M8.5 15.5h7"/></svg>
+                Whitelist
+              </button>
+            </div>
           </div>
         </article>
       </section>
@@ -108,10 +194,20 @@
       <section class="results-grid">
         <article class="panel result-panel">
           <div class="panel-title compact">
-            <h2>Novos alvos para bloqueio</h2>
+            <div>
+              <h2>Novos Alvos para Bloqueio</h2>
+              <p>Domínios identificados para bloqueio</p>
+            </div>
             <span class="badge">novos_dominios.txt</span>
           </div>
-          <div id="blocklistPreview" class="review-list">Sem processamento.</div>
+          <div id="blocklistPreview" class="review-list">
+            <div class="empty-result">
+              <span class="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/></svg>
+              </span>
+              <span>Nenhum domínio para bloqueio no momento.</span>
+            </div>
+          </div>
           <div class="preview-toolbar">
             <span id="blocklistMeta">0 alvos</span>
             <div>
@@ -123,10 +219,13 @@
 
         <article class="panel result-panel">
           <div class="panel-title compact">
-            <h2>Domínios protegidos</h2>
+            <div>
+              <h2>Domínios Protegidos</h2>
+              <p>Whitelist</p>
+            </div>
             <span class="badge">whitelist.txt</span>
           </div>
-          <pre id="whitelistPreview">Sem processamento.</pre>
+          <pre id="whitelistPreview">Nenhum domínio na whitelist.</pre>
           <div class="preview-toolbar">
             <span id="whitelistMeta">0 dominios</span>
           </div>
@@ -168,6 +267,8 @@
       </article>
     </section>
 
+    </main>
+
     <dialog id="whitelistDialog">
       <div class="dialog-header">
         <h2>Whitelist atual</h2>
@@ -176,7 +277,7 @@
       <pre id="whitelistContent">Carregando...</pre>
       <a class="secondary-button" href="/download/whitelist">Download whitelist</a>
     </dialog>
-  </main>
+  </div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
