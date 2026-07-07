@@ -146,7 +146,72 @@ svg.icon {
   top: 0;
   height: 100vh;
   overflow-y: auto;
-  transition: transform var(--transition);
+  transition: transform var(--transition), width var(--transition), padding var(--transition);
+}
+
+/* Sidebar recolhida (desktop) */
+.sidebar-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-main);
+}
+
+@media (min-width: 961px) {
+  html.sidebar-collapsed .sidebar {
+    width: 76px;
+    flex-basis: 76px;
+    padding: 28px 12px;
+  }
+
+  html.sidebar-collapsed .brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  html.sidebar-collapsed .brand-text,
+  html.sidebar-collapsed .nav-label,
+  html.sidebar-collapsed .user-info,
+  html.sidebar-collapsed .user-card summary .chevron,
+  html.sidebar-collapsed .status-card-text,
+  html.sidebar-collapsed .status-card .sparkline {
+    display: none;
+  }
+
+  html.sidebar-collapsed .sidebar-toggle-btn {
+    margin: 0 auto;
+    transform: rotate(180deg);
+  }
+
+  html.sidebar-collapsed .side-nav .tab-button {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  html.sidebar-collapsed .side-nav .tab-button.active::before {
+    left: -12px;
+  }
+
+  html.sidebar-collapsed .user-card summary {
+    justify-content: center;
+  }
+
+  html.sidebar-collapsed .status-card {
+    justify-content: center;
+  }
 }
 
 .content {
@@ -1291,6 +1356,10 @@ dialog .secondary-button {
 @media (max-width: 960px) {
   .hamburger-btn {
     display: inline-flex;
+  }
+
+  .sidebar-toggle-btn {
+    display: none;
   }
 
   .sidebar {

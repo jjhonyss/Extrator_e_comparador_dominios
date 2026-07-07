@@ -141,6 +141,7 @@ def create_app() -> Flask:
     flask_app.config["SESSION_COOKIE_HTTPONLY"] = True
     flask_app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     flask_app.config["SESSION_COOKIE_SECURE"] = CONFIG["SESSION_COOKIE_SECURE"]
+    flask_app.config["TEMPLATES_AUTO_RELOAD"] = True
     return flask_app
 
 
@@ -223,6 +224,7 @@ def login():
             clear_login_attempts(username)
             session.clear()
             session["authenticated"] = True
+            session["username"] = username
             session["csrf_token"] = secrets.token_hex(16)
             session.permanent = True
             next_url = request.args.get("next") or url_for("index")
@@ -245,6 +247,7 @@ def index():
         "index.html",
         max_file_size_mb=CONFIG["MAX_FILE_SIZE"] // (1024 * 1024),
         csrf_token=get_csrf_token(),
+        username=session.get("username", "Usuário"),
     )
 
 

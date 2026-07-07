@@ -9,6 +9,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script>
+    if (localStorage.getItem('domainGuard:sidebarCollapsed') === '1') {
+      document.documentElement.classList.add('sidebar-collapsed');
+    }
+  </script>
 </head>
 <body class="dark">
   <input type="checkbox" id="navToggle" class="nav-toggle-checkbox">
@@ -19,20 +24,24 @@
         <span>
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3.5v5.2c0 4.8-3.2 8.4-7 9.8-3.8-1.4-7-5-7-9.8V6.5L12 3z"/></svg>
         </span>
-        <div>
+        <div class="brand-text">
           <strong>Domain Guard</strong>
           <small>Extrator e comparador de domínios</small>
         </div>
       </a>
 
+      <button id="sidebarToggle" class="sidebar-toggle-btn" type="button" aria-label="Recolher menu" title="Recolher menu">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+
       <nav class="side-nav" aria-label="Navegação principal">
-        <button class="tab-button active" type="button" data-tab-target="mainPanel">
+        <button class="tab-button active" type="button" data-tab-target="mainPanel" title="Dashboard">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="3.5" width="7" height="4.5" rx="1.2"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.2"/><rect x="3.5" y="13" width="7" height="7.5" rx="1.2"/></svg>
-          Dashboard
+          <span class="nav-label">Dashboard</span>
         </button>
-        <button class="tab-button" type="button" data-tab-target="historyPanel">
+        <button class="tab-button" type="button" data-tab-target="historyPanel" title="Histórico de Auditoria">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v5h5"/><path d="M4.3 14a8 8 0 1 0 2-8.6L3.5 8.5"/><path d="M12 8v4.5l3 2"/></svg>
-          Histórico de Auditoria
+          <span class="nav-label">Histórico de Auditoria</span>
         </button>
       </nav>
 
@@ -43,7 +52,7 @@
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6.2 7-6.2s7 2.6 7 6.2"/></svg>
             </span>
             <span class="user-info">
-              <strong>Sessão ativa</strong>
+              <strong>{{ username }}</strong>
               <small>Acesso autenticado</small>
             </span>
             <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -73,7 +82,7 @@
       <div class="topbar">
         <div class="topbar-greeting">
           <label for="navToggle" class="hamburger-btn" aria-label="Abrir menu">☰</label>
-          <h1>Olá! 👋</h1>
+          <h1>Olá, {{ username }}! 👋</h1>
           <p>Monitore, extraia e mantenha sua base de domínios sempre atualizada.</p>
         </div>
         <div class="topbar-actions">

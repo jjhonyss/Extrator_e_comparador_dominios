@@ -26,6 +26,8 @@ const refreshHistory = document.querySelector("#refreshHistory");
 const historyStatus = document.querySelector("#historyStatus");
 const historyTableBody = document.querySelector("#historyTableBody");
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+const sidebarToggle = document.querySelector("#sidebarToggle");
+const SIDEBAR_COLLAPSED_KEY = "domainGuard:sidebarCollapsed";
 
 let selectedFiles = [];
 let blocklistItems = [];
@@ -402,6 +404,21 @@ confirmUpdateButton.addEventListener("click", async () => {
 themeToggle.addEventListener("click", () => {
   document.body.classList.toggle("dark");
   themeToggle.textContent = document.body.classList.contains("dark") ? "Modo claro" : "Modo escuro";
+});
+
+function setSidebarCollapsed(collapsed) {
+  document.documentElement.classList.toggle("sidebar-collapsed", collapsed);
+  const label = collapsed ? "Expandir menu" : "Recolher menu";
+  sidebarToggle.setAttribute("aria-label", label);
+  sidebarToggle.title = label;
+}
+
+setSidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+
+sidebarToggle.addEventListener("click", () => {
+  const collapsed = !document.documentElement.classList.contains("sidebar-collapsed");
+  setSidebarCollapsed(collapsed);
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
 });
 
 blocklistPrev.addEventListener("click", () => {
